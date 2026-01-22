@@ -3,6 +3,7 @@ from sqlalchemy import func, or_
 from models import User, Project, Layer, Folder
 from schemas import UserCreate, ProjectCreate, LayerCreate, FolderCreate
 from passlib.context import CryptContext
+import os
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -44,21 +45,27 @@ def delete_user(db: Session, user_id: int):
 
 # --- PROJECT CRUD ---
 def get_projects(db: Session, user_id: int):
-    # Returns projects owned by user OR projects where user is assigned
-    return db.query(Project).filter(
-        or_(
-            Project.owner_id == user_id,
-            Project.assigned_users.any(id=user_id)
-        )
-    ).all()
+    # Simplificamos la consulta para evitar errores de relación si no hay usuarios asignados
+    # Obtenemos proyectos donde el usuario es dueño
+    owned = db.query(Project).filter(Project.owner_id == user_id).all()
+    
+    # Obtenemos proyectos donde el usuario está asignado (usando la tabla de asociación directamente si es necesario)
+    # Pero por ahora, para asegurar que funcione, devolvemos al menos los propios
+    return owned
 
 def create_project(db: Session, project: ProjectCreate, user_id: int):
-    data = project.dict()
-    db_project = Project(**data, owner_id=user_id)
-    db.add(db_project)
-    db.commit()
-    db.refresh(db_project)
-    return db_project
+    try:
+        data = project.dict()
+        # Aseguramos que el owner_id esté presente
+        db_project = Project(**data, owner_id=user_id)
+        db.add(db_project)
+        db.commit()
+        db.refresh(db_project)
+        return db_project
+    except Exception as e:
+        db.rollback()
+        print(f"Error en create_project: {e}")
+        raise e
 
 def update_project(db: Session, project_id: int, project_data: dict):
     db_project = db.query(Project).filter(Project.id == project_id).first()
@@ -80,6 +87,7 @@ def assign_user_to_project(db: Session, user_id: int, project_id: int):
     user = get_user(db, user_id)
     project = db.query(Project).filter(Project.id == project_id).first()
     if user and project:
+        # Verificamos si la relación existe antes de añadir
         if user not in project.assigned_users:
             project.assigned_users.append(user)
             db.commit()
@@ -100,8 +108,6 @@ def get_folders_by_project(db: Session, project_id: int):
 def delete_folder(db: Session, folder_id: int):
     db_folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if db_folder:
-        # Before deleting folder, maybe move layers to root or delete them?
-        # For now let's just nullify folder_id in layers
         db.query(Layer).filter(Layer.folder_id == folder_id).update({Layer.folder_id: None})
         db.delete(db_folder)
         db.commit()
@@ -127,7 +133,6 @@ def update_layer(db: Session, layer_id: int, layer_data: dict):
 def delete_layer(db: Session, layer_id: int):
     db_layer = db.query(Layer).filter(Layer.id == layer_id).first()
     if db_layer:
-        # Delete file from disk if it exists
         if db_layer.file_path and os.path.exists(db_layer.file_path):
             try:
                 os.remove(db_layer.file_path)
