@@ -10,7 +10,14 @@ import { Observable } from 'rxjs';
     providedIn: 'root'
 })
 export class ApiService {
-    public baseUrl = 'http://localhost:8000';
+    /**
+     * En producción, la URL suele ser relativa si el frontend y backend 
+     * se sirven desde el mismo dominio/proxy, o una URL absoluta de API.
+     * Para Docker/Nginx, usaremos una ruta que el proxy pueda redirigir.
+     */
+    public baseUrl = window.location.origin.includes('localhost') 
+        ? 'http://localhost:8000' 
+        : window.location.origin + '/api';
 
     getApiUrl(): string {
         return this.baseUrl;
@@ -20,10 +27,6 @@ export class ApiService {
 
     /**
      * Carga archivos al servidor asociados a un proyecto
-     * @param files Array de archivos a cargar
-     * @param projectId ID del proyecto
-     * @param folderId ID opcional de la carpeta
-     * @returns Observable con la respuesta del servidor
      */
     uploadFiles(files: File[], projectId: number, folderId?: number): Observable<any> {
         const formData = new FormData();
@@ -37,11 +40,8 @@ export class ApiService {
         return this.http.post(`${this.baseUrl}/upload`, formData);
     }
 
-
     /**
      * Obtiene la URL para solicitar tiles de un archivo raster
-     * @param filename Nombre del archivo raster
-     * @returns URL template para tiles (con placeholders {z}/{x}/{y})
      */
     getTilesUrl(filename: string): string {
         return `${this.baseUrl}/tiles/${filename}/{z}/{x}/{y}.png`;
@@ -49,8 +49,6 @@ export class ApiService {
 
     /**
      * Obtiene la URL directa de un archivo cargado
-     * @param filename Nombre del archivo
-     * @returns URL del archivo
      */
     getFileUrl(filename: string): string {
         return `${this.baseUrl}/uploads/${filename}`;

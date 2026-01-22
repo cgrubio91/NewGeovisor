@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgis/postgis:15-3.3
+    container_name: geovisor_db
+    restart: always
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: geovisor_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    container_name: geovisor_backend
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/geovisor_db
+      - SECRET_KEY=tu_clave_secreta_aqui
+      - ALLOWED_ORIGINS=http://localhost,http://localhost:80,http://localhost:4200
+    volumes:
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    container_name: geovisor_frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

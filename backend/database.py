@@ -3,30 +3,38 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
 
 class Settings(BaseSettings):
-    DATABASE_URL: str
-    SECRET_KEY: str
-    ALGORITHM: str
-    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    # Valores por defecto para desarrollo, pero obligatorios en producción
+    DATABASE_URL: str = "sqlite:///./test.db"
+    SECRET_KEY: str = "DEVELOPMENT_SECRET_KEY_CHANGE_ME"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
+    ALLOWED_ORIGINS: str = "*"
 
     class Config:
         env_file = ".env"
+        case_sensitive = True
 
 settings = Settings()
 
-SQLALCHEMY_DATABASE_URL = settings.DATABASE_URL
+# Configuración del motor de base de datos
+# Si usamos SQLite (desarrollo), necesitamos check_same_thread=False
+connect_args = {}
+if settings.DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
 
-# Create engine
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(
+    settings.DATABASE_URL, 
+    connect_args=connect_args
+)
 
-# Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Base class for models
 Base = declarative_base()
 
-# Dependency to get DB session
+# Dependencia para obtener la sesión de DB
 def get_db():
     db = SessionLocal()
     try:
