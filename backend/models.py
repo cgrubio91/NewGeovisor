@@ -78,7 +78,7 @@ class Layer(Base):
     folder_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
     
     # CAMBIO AQUÍ: metadata -> settings o extra_info
-    settings = Column(JSON, nullable=True) 
+    settings = Column(JSON, nullable=True, default={}) 
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

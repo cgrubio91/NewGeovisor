@@ -56,8 +56,10 @@ def get_projects(db: Session, user_id: int):
 def create_project(db: Session, project: ProjectCreate, user_id: int):
     try:
         data = project.dict()
-        # Aseguramos que el owner_id esté presente
-        db_project = Project(**data, owner_id=user_id)
+        # Limpiamos valores nulos que puedan causar problemas en SQLite con tipos DateTime o JSON
+        clean_data = {k: v for k, v in data.items() if v is not None}
+        
+        db_project = Project(**clean_data, owner_id=user_id)
         db.add(db_project)
         db.commit()
         db.refresh(db_project)
