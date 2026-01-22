@@ -12,10 +12,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     ALLOWED_ORIGINS: str = "*"
+    ENV: str = "development"
 
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore" # Esto permite que haya variables en el .env que no estén aquí sin dar error
 
 settings = Settings()
 
