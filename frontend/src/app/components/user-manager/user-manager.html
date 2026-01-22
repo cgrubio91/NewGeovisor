@@ -1,0 +1,80 @@
+<div class="user-manager-container fade-in">
+    <div class="header-actions">
+        <h3>Gestión de Usuarios</h3>
+        <button class="btn btn-primary" (click)="showCreateForm = !showCreateForm">
+            <i class="fas" [class.fa-plus]="!showCreateForm" [class.fa-arrow-left]="showCreateForm"></i>
+            {{ showCreateForm ? 'Volver' : 'Nuevo Usuario' }}
+        </button>
+    </div>
+
+    <!-- Create User Form -->
+    <div class="create-form card slide-in-top" *ngIf="showCreateForm">
+        <h4>Registrar Usuario</h4>
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Nombre de Usuario</label>
+                <input type="text" [(ngModel)]="newUsername" placeholder="Ej. juanperez">
+            </div>
+            <div class="form-group">
+                <label>Correo Electrónico</label>
+                <input type="email" [(ngModel)]="newEmail" placeholder="juan@geovisor.com">
+            </div>
+            <div class="form-group">
+                <label>Nombre Completo</label>
+                <input type="text" [(ngModel)]="newFullName" placeholder="Juan Pérez">
+            </div>
+            <div class="form-group">
+                <label>Código de Acceso (Password)</label>
+                <input type="password" [(ngModel)]="newPassword" placeholder="********">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-primary" (click)="createUser()" [disabled]="isLoading">
+                {{ isLoading ? 'Registrando...' : 'Crear Usuario' }}
+            </button>
+        </div>
+    </div>
+
+    <div class="manager-layout" *ngIf="!showCreateForm">
+        <!-- Users List -->
+        <div class="users-section card">
+            <h4>Usuarios del Sistema</h4>
+            <div class="user-list">
+                <div class="user-item" *ngFor="let user of users">
+                    <div class="user-avatar">
+                        {{ user.username.substring(0, 1).toUpperCase() }}
+                    </div>
+                    <div class="user-info">
+                        <strong>{{ user.full_name || user.username }}</strong>
+                        <span class="user-email">{{ user.email }}</span>
+                    </div>
+                    <div class="user-actions">
+                        <button class="btn btn-icon" (click)="selectedUserId = user.id"
+                            [class.active]="selectedUserId === user.id" title="Seleccionar para asignar">
+                            <i class="fas fa-hand-pointer"></i>
+                        </button>
+                        <button class="btn btn-icon text-danger" (click)="deleteUser(user)" title="Eliminar Usuario">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assignment Section -->
+        <div class="assignment-section card fade-in" *ngIf="selectedUserId">
+            <h4>Asignar Proyecto</h4>
+            <p class="text-muted">Asignar proyecto al usuario ID: {{ selectedUserId }}</p>
+            <div class="form-group">
+                <label>Seleccionar Proyecto</label>
+                <select [(ngModel)]="selectedProjectId">
+                    <option [ngValue]="null">Elegir proyecto...</option>
+                    <option *ngFor="let p of projects" [ngValue]="p.id">{{ p.name }}</option>
+                </select>
+            </div>
+            <button class="btn btn-primary full-width" (click)="assignProject()" [disabled]="!selectedProjectId">
+                Confirmar Asignación
+            </button>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,18 @@
+<div class="toast-container">
+    <div *ngFor="let toast of toasts$ | async" class="toast" [ngClass]="toast.type" (click)="close(toast.id)">
+        <div class="toast-content">
+            <span class="icon">
+                <i class="fas" [ngClass]="{
+            'fa-check-circle': toast.type === 'success',
+            'fa-exclamation-circle': toast.type === 'error',
+            'fa-info-circle': toast.type === 'info',
+            'fa-exclamation-triangle': toast.type === 'warning'
+          }"></i>
+            </span>
+            <span class="message">{{ toast.message }}</span>
+        </div>
+        <button class="close-btn" (click)="close(toast.id); $event.stopPropagation()">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+</div>

@@ -1,0 +1,86 @@
+<div class="project-manager-container fade-in">
+    <div class="header-actions">
+        <h3>Proyectos</h3>
+        <button class="btn btn-primary" (click)="toggleCreateForm()" *ngIf="!showCreateForm">
+            <i class="fas fa-plus"></i> Nuevo Proyecto
+        </button>
+        <button class="btn btn-secondary" (click)="toggleCreateForm()" *ngIf="showCreateForm">
+            <i class="fas fa-arrow-left"></i> Volver
+        </button>
+    </div>
+
+    <!-- Create Project Form -->
+    <div class="create-form card slide-in-right" *ngIf="showCreateForm">
+        <h4>Crear Nuevo Proyecto</h4>
+        <div class="form-grid">
+            <div class="form-group full-width">
+                <label>Nombre del Proyecto</label>
+                <input type="text" [(ngModel)]="newProjectName" placeholder="Ej. Levantamiento Topográfico Norte">
+            </div>
+            <div class="form-group">
+                <label>Número de Contrato</label>
+                <input type="text" [(ngModel)]="newProjectContract" placeholder="Ej. CONTR-2024-001">
+            </div>
+            <div class="form-group">
+                <label>URL de Foto/Portada</label>
+                <input type="text" [(ngModel)]="newProjectPhoto" placeholder="Ej. https://example.com/photo.jpg">
+            </div>
+            <div class="form-group">
+                <label>Fecha de Inicio</label>
+                <input type="date" [(ngModel)]="newProjectStart">
+            </div>
+            <div class="form-group">
+                <label>Fecha de Terminación</label>
+                <input type="date" [(ngModel)]="newProjectEnd">
+            </div>
+            <div class="form-group full-width">
+                <label>Descripción</label>
+                <textarea [(ngModel)]="newProjectDesc" placeholder="Descripción opcional..."></textarea>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-primary" (click)="createProject()" [disabled]="!newProjectName || isLoading">
+                {{ isLoading ? 'Creando...' : 'Crear Proyecto' }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Project List -->
+    <div class="project-list" *ngIf="!showCreateForm">
+        <div *ngIf="isLoading && projects.length === 0" class="loading-state">
+            <div class="spinner"></div>
+            <p>Cargando proyectos...</p>
+        </div>
+
+        <div *ngIf="!isLoading && projects.length === 0" class="empty-state">
+            <p class="text-muted">No hay proyectos. Crea uno nuevo para comenzar.</p>
+        </div>
+
+        <div class="project-card card" *ngFor="let project of projects" (click)="selectProject(project)">
+            <div class="project-image"
+                [style.background-image]="project.photo_url ? 'url(' + project.photo_url + ')' : ''">
+                <i class="fas fa-map" *ngIf="!project.photo_url"></i>
+            </div>
+            <div class="project-info">
+                <div class="project-title-row">
+                    <h5>{{ project.name }}</h5>
+                    <span class="badge" *ngIf="project.contract_number">{{ project.contract_number }}</span>
+                </div>
+                <p class="text-muted description">{{ project.description || 'Sin descripción' }}</p>
+                <div class="meta">
+                    <span class="date" title="Fecha de inicio"><i class="far fa-calendar"></i> {{ project.start_date |
+                        date:'dd/MM/yyyy' }}</span>
+                    <span class="layers-count"><i class="fas fa-layer-group"></i> {{ project.layers.length || 0 }}
+                        Capas</span>
+                </div>
+            </div>
+            <div class="project-actions">
+                <button class="btn btn-sm btn-outline">Abrir</button>
+                <button class="btn btn-sm btn-danger-outline"
+                    (click)="$event.stopPropagation(); deleteProject(project)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
