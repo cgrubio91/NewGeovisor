@@ -1,4 +1,6 @@
 import { Component } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api.service';
 import { MapService } from '../../services/map.service';
 import { ToastService } from '../../services/toast.service';
@@ -14,6 +16,7 @@ import { finalize } from 'rxjs/operators';
 @Component({
   selector: 'app-upload',
   standalone: true,
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="upload-panel card">
       <div class="panel-header">
