@@ -20,14 +20,19 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Configuración del motor de base de datos
-# Si usamos SQLite (desarrollo), necesitamos check_same_thread=False
 connect_args = {}
+
+# Verificación de seguridad para asegurar el uso de PostGIS en producción/desarrollo avanzado
 if settings.DATABASE_URL.startswith("sqlite"):
+    print("⚠️ ADVERTENCIA: Usando SQLite. Las funciones de PostGIS no estarán disponibles.")
     connect_args = {"check_same_thread": False}
+elif settings.DATABASE_URL.startswith("postgresql"):
+    print("✅ Conectando a PostgreSQL/PostGIS...")
 
 engine = create_engine(
     settings.DATABASE_URL, 
-    connect_args=connect_args
+    connect_args=connect_args,
+    pool_pre_ping=True # Ayuda a mantener la conexión viva
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
