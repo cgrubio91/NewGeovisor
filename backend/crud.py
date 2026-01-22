@@ -4,6 +4,11 @@ from models import User, Project, Layer, Folder
 from schemas import UserCreate, ProjectCreate, LayerCreate, FolderCreate
 from passlib.context import CryptContext
 import os
+import logging
+
+# Configurar logging para ver errores detallados en la terminal del usuario
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -45,35 +50,58 @@ def delete_user(db: Session, user_id: int):
 
 # --- PROJECT CRUD ---
 def get_projects(db: Session, user_id: int):
-    # Simplificamos la consulta para evitar errores de relación si no hay usuarios asignados
-    # Obtenemos proyectos donde el usuario es dueño
-    owned = db.query(Project).filter(Project.owner_id == user_id).all()
-    
-    # Obtenemos proyectos donde el usuario está asignado (usando la tabla de asociación directamente si es necesario)
-    # Pero por ahora, para asegurar que funcione, devolvemos al menos los propios
-    return owned
+    """
+    Obtiene proyectos donde el usuario es dueño o está asignado.
+    Usamos una consulta optimizada para evitar problemas de carga de relaciones.
+    """
+    try:
+        return db.query(Project).filter(
+            or_(
+                Project.owner_id == user_id,
+                Project.assigned_users.any(id=user_id)
+            )
+        ).all()
+    except Exception as e:
+        logger.error(f"Error en get_projects: {e}")
+        # Fallback: solo proyectos propios si la relación Many-to-Many falla
+        return db.query(Project).filter(Project.owner_id == user_id).all()
 
 def create_project(db: Session, project: ProjectCreate, user_id: int):
+    """
+    Crea un proyecto asegurando compatibilidad con PostgreSQL y SQLite.
+    """
     try:
-        data = project.dict()
-        # Limpiamos valores nulos que puedan causar problemas en SQLite con tipos DateTime o JSON
-        clean_data = {k: v for k, v in data.items() if v is not None}
+        # Convertir esquema Pydantic a diccionario
+        project_data = project.dict()
         
-        db_project = Project(**clean_data, owner_id=user_id)
+        # Limpiar datos para evitar errores de tipos en SQLAlchemy/PostgreSQL
+        # Especialmente con fechas y campos opcionales
+        db_project = Project(
+            name=project_data.get("name"),
+            description=project_data.get("description"),
+            contract_number=project_data.get("contract_number"),
+            photo_url=project_data.get("photo_url"),
+            start_date=project_data.get("start_date"),
+            end_date=project_data.get("end_date"),
+            owner_id=user_id
+        )
+        
         db.add(db_project)
         db.commit()
         db.refresh(db_project)
+        logger.info(f"Proyecto '{db_project.name}' creado exitosamente para el usuario {user_id}")
         return db_project
     except Exception as e:
         db.rollback()
-        print(f"Error en create_project: {e}")
+        logger.error(f"Error crítico al crear proyecto: {str(e)}")
         raise e
 
 def update_project(db: Session, project_id: int, project_data: dict):
     db_project = db.query(Project).filter(Project.id == project_id).first()
     if db_project:
         for key, value in project_data.items():
-            setattr(db_project, key, value)
+            if hasattr(db_project, key):
+                setattr(db_project, key, value)
         db.commit()
         db.refresh(db_project)
     return db_project
@@ -89,7 +117,6 @@ def assign_user_to_project(db: Session, user_id: int, project_id: int):
     user = get_user(db, user_id)
     project = db.query(Project).filter(Project.id == project_id).first()
     if user and project:
-        # Verificamos si la relación existe antes de añadir
         if user not in project.assigned_users:
             project.assigned_users.append(user)
             db.commit()
@@ -117,17 +144,28 @@ def delete_folder(db: Session, folder_id: int):
 
 # --- LAYER CRUD ---
 def create_layer(db: Session, layer: LayerCreate):
-    db_layer = Layer(**layer.dict())
-    db.add(db_layer)
-    db.commit()
-    db.refresh(db_layer)
-    return db_layer
+    try:
+        layer_data = layer.dict()
+        # Asegurar que settings sea un dict válido para JSON en DB
+        if layer_data.get("settings") is None:
+            layer_data["settings"] = {}
+            
+        db_layer = Layer(**layer_data)
+        db.add(db_layer)
+        db.commit()
+        db.refresh(db_layer)
+        return db_layer
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error al crear capa: {e}")
+        raise e
 
 def update_layer(db: Session, layer_id: int, layer_data: dict):
     db_layer = db.query(Layer).filter(Layer.id == layer_id).first()
     if db_layer:
         for key, value in layer_data.items():
-            setattr(db_layer, key, value)
+            if hasattr(db_layer, key):
+                setattr(db_layer, key, value)
         db.commit()
         db.refresh(db_layer)
     return db_layer

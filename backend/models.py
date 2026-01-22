@@ -1,63 +1,64 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float, Table, JSON
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Table, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from geoalchemy2 import Geometry
 from database import Base
 
-# Association table for User-Project Many-to-Many relationship
+# Tabla de asociación para la relación Muchos-a-Muchos entre Usuarios y Proyectos
 user_projects = Table(
     "user_projects",
     Base.metadata,
-    Column("user_id", Integer, ForeignKey("users.id"), primary_key=True),
-    Column("project_id", Integer, ForeignKey("projects.id"), primary_key=True)
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
 )
 
 class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
     full_name = Column(String, nullable=True)
-    hashed_password = Column(String) # This will store the "access code"
+    hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Many-to-many relationship with projects
+    # Relaciones
+    owned_projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
     assigned_projects = relationship("Project", secondary=user_projects, back_populates="assigned_users")
-    # For projects they own
-    owned_projects = relationship("Project", back_populates="owner")
 
 class Project(Base):
     __tablename__ = "projects"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
+    name = Column(String, index=True, nullable=False)
     description = Column(String, nullable=True)
     contract_number = Column(String, nullable=True)
     start_date = Column(DateTime(timezone=True), nullable=True)
     end_date = Column(DateTime(timezone=True), nullable=True)
-    photo_url = Column(String, nullable=True) # Project "profile" photo
+    photo_url = Column(String, nullable=True)
     
-    owner_id = Column(Integer, ForeignKey("users.id"))
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=True)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # Relaciones
     owner = relationship("User", back_populates="owned_projects")
     assigned_users = relationship("User", secondary=user_projects, back_populates="assigned_projects")
-    layers = relationship("Layer", back_populates="project")
-    folders = relationship("Folder", back_populates="project")
+    layers = relationship("Layer", back_populates="project", cascade="all, delete-orphan")
+    folders = relationship("Folder", back_populates="project", cascade="all, delete-orphan")
 
 class Folder(Base):
     __tablename__ = "folders"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id"))
-    parent_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
+    name = Column(String, index=True, nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    parent_id = Column(Integer, ForeignKey("folders.id", ondelete="CASCADE"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Relaciones
     project = relationship("Project", back_populates="folders")
     layers = relationship("Layer", back_populates="folder")
     subfolders = relationship("Folder", backref="parent", remote_side=[id])
@@ -66,21 +67,22 @@ class Layer(Base):
     __tablename__ = "layers"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    layer_type = Column(String)  # 'raster', 'vector', '3d_model'
-    file_path = Column(String)
-    crs = Column(String, nullable=True) # e.g., 'EPSG:4326'
+    name = Column(String, index=True, nullable=False)
+    layer_type = Column(String, nullable=False)  # 'raster', 'vector', '3d_model'
+    file_path = Column(String, nullable=False)
+    crs = Column(String, nullable=True)
     
-    # Store the bounding box or geometry of the layer
+    # Geometría para PostGIS
     bounds = Column(Geometry('POLYGON', srid=4326), nullable=True)
     
-    project_id = Column(Integer, ForeignKey("projects.id"))
-    folder_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    folder_id = Column(Integer, ForeignKey("folders.id", ondelete="SET NULL"), nullable=True)
     
-    # CAMBIO AQUÍ: metadata -> settings o extra_info
+    # Configuraciones adicionales en formato JSON
     settings = Column(JSON, nullable=True, default={}) 
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
+    # Relaciones
     project = relationship("Project", back_populates="layers")
     folder = relationship("Folder", back_populates="layers")
