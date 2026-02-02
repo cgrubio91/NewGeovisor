@@ -35,11 +35,12 @@ export interface Project {
 export interface Layer {
     id?: number;
     name: string;
-    layer_type: 'raster' | 'vector' | '3d_model';
+    layer_type: 'raster' | 'vector' | '3d_model' | 'kml';
     file_path: string;
     crs?: string;
     project_id: number;
     folder_id?: number | null;
+    settings?: any;
     metadata?: any;
     visible?: boolean; // Frontend state
     opacity?: number; // Frontend state

@@ -45,15 +45,50 @@ export class MapComponent implements OnInit, AfterViewInit {
     if (!project.layers) return;
 
     project.layers.forEach(layer => {
-      const metadata = layer.metadata;
-      if (!metadata) return;
+      // El backend devuelve 'settings', pero el frontend a veces usaba 'metadata'.
+      // Usamos settings como fuente principal.
+      const metadata = layer.settings || layer.metadata;
+
+      // Si no hay metadatos, intentamos seguir si es vector o kml
+      if (!metadata && layer.layer_type !== 'vector' && layer.layer_type !== 'kml') return;
 
       if (layer.layer_type === 'raster') {
         const filename = layer.file_path.split(/[\\/]/).pop();
         const tileUrl = `${this.apiService.getApiUrl()}/tiles/${filename}/{z}/{x}/{y}.png`;
-        this.mapService.addRasterLayer(layer.name, tileUrl, metadata.bounds);
+
+        // Extraer bounds correctamente. Priorizar WGS84 para el zoom.
+        let extent: number[] | undefined;
+
+        if (metadata && metadata.bounds_wgs84) {
+          const b = metadata.bounds_wgs84;
+          extent = [
+            Number(b.minx),
+            Number(b.miny),
+            Number(b.maxx),
+            Number(b.maxy)
+          ];
+        } else if (metadata && metadata.bounds) {
+          const b = metadata.bounds;
+          extent = [
+            Number(b.left),
+            Number(b.bottom),
+            Number(b.right),
+            Number(b.top)
+          ];
+        }
+
+        // Verificar si el extent es válido (no contiene NaN)
+        if (extent && extent.some(v => isNaN(v))) {
+          extent = undefined;
+        }
+
+        this.mapService.addRasterLayer(layer.name, tileUrl, extent, layer.id);
       } else if (layer.layer_type === 'vector') {
-        this.mapService.addVectorLayer(layer.name, metadata);
+        this.mapService.addVectorLayer(layer.name, metadata, layer.id);
+      } else if (layer.layer_type === 'kml') {
+        const filename = layer.file_path.split(/[\\/]/).pop();
+        const kmlUrl = `${this.apiService.getApiUrl()}/files/${filename}`;
+        this.mapService.addKmlLayer(layer.name, kmlUrl, layer.id);
       }
     });
   }

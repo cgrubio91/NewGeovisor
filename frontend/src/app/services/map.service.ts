@@ -9,6 +9,7 @@ import { fromLonLat, transformExtent } from 'ol/proj';
 import XYZ from 'ol/source/XYZ';
 import VectorSource from 'ol/source/Vector';
 import GeoJSON from 'ol/format/GeoJSON';
+import KML from 'ol/format/KML';
 import { register } from 'ol/proj/proj4';
 import proj4 from 'proj4';
 import { Subject } from 'rxjs';
@@ -75,30 +76,42 @@ export class MapService {
     /**
      * Agrega una capa raster (XYZ/Tiles)
      */
-    addRasterLayer(name: string, url: string, extent?: number[]) {
+    addRasterLayer(name: string, url: string, extent?: number[], id?: number) {
+        // Transformar extent a la proyección del mapa (3857) si se proporciona en 4326
+        let transformedExtent = extent;
+        if (extent) {
+            // Asumimos que si los valores son pequeños (lon/lat), están en 4326
+            const isLonLat = Math.abs(extent[0]) <= 180 && Math.abs(extent[1]) <= 90;
+            if (isLonLat) {
+                transformedExtent = transformExtent(extent, 'EPSG:4326', 'EPSG:3857');
+            }
+        }
+
         const layer = new TileLayer({
             source: new XYZ({
                 url: url,
                 crossOrigin: 'anonymous'
             }),
+            extent: transformedExtent,
             properties: {
                 name: name,
-                id: name + Date.now(),
-                type: 'raster'
+                id: id || name + Date.now(),
+                type: 'raster',
+                originalExtent: extent
             }
         });
 
         this.addLayer(layer, 'raster');
 
-        if (extent) {
-            this.zoomToExtent(extent);
+        if (transformedExtent) {
+            this.zoomToExtent(transformedExtent, 'EPSG:3857');
         }
     }
 
     /**
      * Agrega una capa vector (GeoJSON)
      */
-    addVectorLayer(name: string, geojson: any) {
+    addVectorLayer(name: string, geojson: any, id?: number) {
         const vectorSource = new VectorSource({
             features: new GeoJSON().readFeatures(geojson, {
                 dataProjection: 'EPSG:4326',
@@ -111,13 +124,41 @@ export class MapService {
             style: (feature) => this.getKMLStyle(feature),
             properties: {
                 name: name,
-                id: name + Date.now(),
+                id: id || name + Date.now(),
                 type: 'vector'
             }
         });
 
         this.addLayer(vectorLayer, 'vector');
-        this.zoomToLayer(vectorLayer);
+        this.zoomToExtent(vectorSource.getExtent(), 'EPSG:3857');
+    }
+
+    addKmlLayer(name: string, url: string, id?: number) {
+        const vectorSource = new VectorSource({
+            url: url,
+            format: new KML({ extractStyles: true })
+        });
+
+        const vectorLayer = new VectorLayer({
+            source: vectorSource,
+            style: (feature) => this.getKMLStyle(feature),
+            properties: {
+                name: name,
+                id: id || name + Date.now(),
+                type: 'kml'
+            }
+        });
+
+        this.addLayer(vectorLayer, 'kml');
+
+        vectorSource.on('change', () => {
+            if (vectorSource.getState() === 'ready') {
+                const extent = vectorSource.getExtent();
+                if (extent && extent[0] !== Infinity) {
+                    this.zoomToExtent(extent, 'EPSG:3857');
+                }
+            }
+        });
     }
 
     /**
@@ -259,9 +300,17 @@ export class MapService {
     zoomToLayer(layer: any) {
         if (!this.map || !layer) return;
 
-        const source = layer.getSource();
-        if (source && typeof source.getExtent === 'function') {
-            const extent = source.getExtent();
+        let extent = layer.getExtent();
+
+        if (!extent) {
+            const source = layer.getSource();
+            if (source && typeof source.getExtent === 'function') {
+                extent = source.getExtent();
+            }
+        }
+
+        if (extent) {
+            // Validar extent
             const isValidExtent = extent &&
                 extent[0] !== Infinity &&
                 extent[0] !== -Infinity &&
@@ -286,26 +335,33 @@ export class MapService {
     zoomToExtent(extent: number[], dataProjection: string = 'EPSG:4326') {
         if (!this.map || !extent) return;
 
-        // Transformar extensión si es necesario
-        let transformedExtent: number[];
+        // Validar que el extent tenga 4 números válidos y no sea infinito
+        const isValid = extent.length === 4 &&
+            extent.every(v => v !== null && v !== undefined && !isNaN(v));
 
-        if (dataProjection !== 'EPSG:3857') {
+        // Evitar [0,0,0,0] o extents extremadamente pequeños/vacíos
+        const isEmpty = Math.abs(extent[0] - extent[2]) < 0.000001 &&
+            Math.abs(extent[1] - extent[3]) < 0.000001;
+
+        if (isValid && !isEmpty) {
             try {
-                transformedExtent = transformExtent(extent, dataProjection, 'EPSG:3857');
+                // Si el extent está en una proyección distinta a 3857, transformarlo
+                let fitExtent = extent;
+                if (dataProjection !== 'EPSG:3857') {
+                    fitExtent = transformExtent(extent, dataProjection, 'EPSG:3857');
+                }
+
+                this.map.getView().fit(fitExtent, {
+                    padding: [50, 50, 50, 50],
+                    maxZoom: 18,
+                    duration: 1000
+                });
             } catch (e) {
-                console.warn('Could not transform extent increasingly, trying raw LonLat', e);
-                const min = fromLonLat([extent[0], extent[1]]);
-                const max = fromLonLat([extent[2], extent[3]]);
-                transformedExtent = [min[0], min[1], max[0], max[1]];
+                console.warn('MapService: Error fitting extent', e);
             }
         } else {
-            transformedExtent = extent;
+            console.warn('MapService: No se puede hacer zoom a una extensión inválida o vacía', extent);
         }
-
-        this.map.getView().fit(transformedExtent, {
-            padding: [50, 50, 50, 50],
-            duration: 1000
-        });
     }
     /**
      * Elimina una capa del mapa por su ID

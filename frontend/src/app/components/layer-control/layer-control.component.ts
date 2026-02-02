@@ -269,17 +269,21 @@ export class LayerControlComponent implements OnInit {
 
     this.projectService.createFolder(name, projectId).subscribe({
       next: (folder) => {
-        this.folders.push({ ...folder, layers: [] });
-        this.folderExpanded[folder.id] = true;
+        // No actualizamos this.folders manualmente para evitar duplicados,
+        // ya que projectContext.setActiveProject disparará la actualización desde el backend/state.
+
         this.showNewFolderInput = false;
         this.toastService.show('Carpeta creada', 'success');
 
-        // Actualizar contexto
         const project = this.projectContext.getActiveProject();
         if (project) {
           project.folders = [...(project.folders || []), folder];
           this.projectContext.setActiveProject(project);
         }
+      },
+      error: (err) => {
+        console.error('Error creating folder:', err);
+        this.toastService.show('Error al crear carpeta', 'error');
       }
     });
   }
@@ -301,6 +305,12 @@ export class LayerControlComponent implements OnInit {
   }
 
   moveLayer(layer: any, folderId?: number) {
+    // Validar que sea una capa persistida (con ID numérico)
+    if (typeof layer.id !== 'number') {
+      this.toastService.show('No se puede mover esta capa (capa base o sistema)', 'info');
+      return;
+    }
+
     this.projectService.updateLayer(layer.id, { folder_id: folderId || null }).subscribe({
       next: () => {
         layer.folder_id = folderId || null;
@@ -312,6 +322,14 @@ export class LayerControlComponent implements OnInit {
 
   deleteLayer(layer: any) {
     if (!confirm(`¿Eliminar la capa "${layer.name}" permanentemente?`)) return;
+
+    // Validar ID numérico
+    if (typeof layer.id !== 'number') {
+      // Si es capa local/base, solo quitar del mapa
+      this.mapService.removeLayer(layer.id);
+      return;
+    }
+
     this.projectService.deleteLayer(layer.id).subscribe({
       next: () => {
         this.mapService.removeLayer(layer.id);

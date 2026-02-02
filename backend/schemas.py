@@ -31,22 +31,33 @@ class UserRead(UserBase):
 # Layer Schemas
 class LayerBase(BaseModel):
     name: str
-    layer_type: str
+    layer_type: str  # 'raster', 'vector', '3d_model', 'point_cloud', 'cad', 'kml'
+    file_format: Optional[str] = None  # 'tiff', 'geotiff', 'las', 'laz', 'obj', 'dwg', 'dxf', 'kmz', 'kml', 'shp', etc.
     file_path: str
     crs: Optional[str] = None
-    metadata: Optional[Any] = None
-    # We might handle geometry input/output differently
+    visible: Optional[bool] = True
+    opacity: Optional[int] = 100  # 0-100
+    z_index: Optional[int] = 0
+    settings: Optional[dict] = {}
     
 class LayerCreate(LayerBase):
     project_id: int
-    # Bound/Geometry handling usually needs a separate serializer/deserializer 
-    # or we extract it from the file server-side
+    folder_id: Optional[int] = None
+
+class LayerUpdate(BaseModel):
+    name: Optional[str] = None
+    visible: Optional[bool] = None
+    opacity: Optional[int] = None
+    z_index: Optional[int] = None
+    settings: Optional[dict] = None
+    folder_id: Optional[int] = None
 
 class LayerRead(LayerBase):
     id: int
     project_id: int
     folder_id: Optional[int] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True

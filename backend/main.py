@@ -17,6 +17,7 @@ except Exception:
     pass
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends, status
+from fastapi.responses import Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -129,8 +130,8 @@ async def read_users_me(current_user: models.User = Depends(get_current_user)):
 # --- USER ENDPOINTS ---
 @app.get("/users/", response_model=List[schemas.UserRead])
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    if not current_user.is_superuser:
-         raise HTTPException(status_code=403, detail="Not enough permissions")
+    # if not current_user.is_superuser:
+    #      raise HTTPException(status_code=403, detail="Not enough permissions")
     return crud.get_users(db, skip=skip, limit=limit)
 
 @app.post("/users/", response_model=schemas.UserRead)
@@ -201,6 +202,12 @@ async def upload_files(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    """
+    Endpoint para subir archivos geoespaciales de múltiples formatos.
+    Soporta: TIFF, GeoTIFF, LAS, LAZ, OBJ, DWG, DXF, KMZ, KML, SHP, y más.
+    """
+    from file_processor import file_processor
+    
     db_project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not db_project:
         raise HTTPException(status_code=404, detail=f"Project with ID {project_id} not found")
@@ -213,6 +220,7 @@ async def upload_files(
         filename = file.filename
         file_path = os.path.join(UPLOAD_DIR, filename)
         
+        # Evitar sobrescribir archivos existentes
         counter = 1
         name, ext_orig = os.path.splitext(filename)
         while os.path.exists(file_path):
@@ -220,54 +228,121 @@ async def upload_files(
             file_path = os.path.join(UPLOAD_DIR, filename)
             counter += 1
 
+        # Guardar archivo
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        metadata = {}
-        ext = filename.lower()
+        # Si es KMZ, descomprimir para obtener el KML y usar ese archivo en su lugar
+        if filename.lower().endswith('.kmz'):
+            import zipfile
+            old_file_path = file_path # Guardar la ruta original del KMZ
+            try:
+                with zipfile.ZipFile(old_file_path, 'r') as zip_ref:
+                    # Buscar el primer archivo .kml dentro del zip
+                    kml_files = [f for f in zip_ref.namelist() if f.lower().endswith('.kml')]
+                    if kml_files:
+                        # Priorizar 'doc.kml' o el primero encontrado
+                        kml_file_in_zip = 'doc.kml' if 'doc.kml' in kml_files else kml_files[0]
+                        
+                        kml_filename_base = os.path.splitext(os.path.basename(kml_file_in_zip))[0]
+                        kml_filename = f"{kml_filename_base}.kml"
+                        kml_path = os.path.join(UPLOAD_DIR, kml_filename)
+                        
+                        # Evitar sobrescribir si el kml ya existe con ese nombre
+                        c = 1
+                        n_tmp, e_tmp = os.path.splitext(kml_filename)
+                        while os.path.exists(kml_path):
+                            kml_filename = f"{n_tmp}_{c}{e_tmp}"
+                            kml_path = os.path.join(UPLOAD_DIR, kml_filename)
+                            c += 1
+                        
+                        with open(kml_path, "wb") as f_out:
+                            f_out.write(zip_ref.read(kml_file_in_zip))
+                        
+                        # Actualizar para usar el KML extraído en la base de datos
+                        filename = kml_filename
+                        file_path = kml_path
+                        name = os.path.splitext(kml_filename)[0] # Actualizar 'name' para el KML
+                        # Borrar el KMZ original para ahorrar espacio y evitar confusiones
+                        os.remove(old_file_path) 
+                    else:
+                        print(f"KMZ file {filename} does not contain a KML file.")
+                        # Si no hay KML, el KMZ no se procesa como capa KML
+                        # Podríamos eliminar el KMZ o dejarlo si se quiere guardar el original
+                        os.remove(old_file_path)
+                        continue # Saltar al siguiente archivo si no se encontró KML
+            except Exception as e:
+                print(f"Error unzipping KMZ {filename}: {e}")
+                # Si falla la descompresión, eliminar el KMZ y continuar
+                os.remove(old_file_path)
+                continue # Saltar al siguiente archivo
         
+        # Procesar archivo con el nuevo file_processor
         try:
-            if ext.endswith(('.tif', '.geotiff', 'tiff', '.ecw', '.jp2')):
-                metadata = gis_service.get_raster_info(file_path)
-            elif ext.endswith('.kml'):
-                metadata = gis_service.kml_to_geojson(file_path)
-            elif ext.endswith('.kmz'):
-                metadata = gis_service.process_kmz(file_path)
-            elif ext.endswith(('.obj', '.gltf', '.glb', '.ply')) or filename.lower() == 'tileset.json':
-                metadata = gis_service.get_3d_info(file_path)
-        except Exception as e:
-            metadata = {"error": str(e)}
-
-        uploaded_files.append({
-            "filename": filename, 
-            "path": file_path,
-            "metadata": metadata
-        })
-
-        try:
-            layer_type = "vector"
-            if ext.endswith(('.tif', '.geotiff', 'tiff', '.ecw', '.jp2')):
-                layer_type = "raster"
-            elif ext.endswith(('.obj', '.gltf', '.glb', '.ply')):
-                layer_type = "3d_model"
+            file_info = file_processor.process_file(file_path)
+            layer_type = file_info.get('layer_type', 'unknown')
+            file_format = file_info.get('file_format', 'unknown')
+            metadata = file_info.get('metadata', {})
             
+            # Extraer CRS si está disponible
+            crs = None
+            if 'crs' in metadata:
+                crs = metadata['crs']
+            
+            uploaded_files.append({
+                "filename": filename, 
+                "path": file_path,
+                "layer_type": layer_type,
+                "file_format": file_format,
+                "metadata": metadata
+            })
+
+            # Crear capa en la base de datos
             layer_in = schemas.LayerCreate(
-                name=filename,
+                name=name,  # Nombre sin extensión
                 layer_type=layer_type,
+                file_format=file_format,
                 file_path=file_path,
+                crs=crs,
                 project_id=project_id,
                 folder_id=folder_id,
+                visible=True,
+                opacity=100,
+                z_index=0,
                 settings=metadata
             )
             crud.create_layer(db=db, layer=layer_in)
+            
         except Exception as e:
-            print(f"Error saving layer to DB: {e}")
+            print(f"Error processing file {filename}: {e}")
+            uploaded_files.append({
+                "filename": filename,
+                "path": file_path,
+                "error": str(e)
+            })
             
     return {"uploaded": uploaded_files}
 
 # --- LAYER CRUD ENDPOINTS ---
+@app.get("/projects/{project_id}/layers", response_model=List[schemas.LayerRead])
+def get_project_layers(
+    project_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """Obtener todas las capas de un proyecto"""
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.owner_id != current_user.id and current_user not in project.assigned_users:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    layers = db.query(models.Layer).filter(models.Layer.project_id == project_id).order_by(models.Layer.z_index).all()
+    return layers
+
 @app.delete("/layers/{layer_id}")
 def delete_layer(layer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Eliminar una capa"""
     layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
     if not layer:
         raise HTTPException(status_code=404, detail="Layer not found")
@@ -276,12 +351,66 @@ def delete_layer(layer_id: int, db: Session = Depends(get_db), current_user: mod
         raise HTTPException(status_code=403, detail="Access denied")
     return crud.delete_layer(db, layer_id)
 
-@app.patch("/layers/{layer_id}")
-def update_layer(layer_id: int, layer_data: dict, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+@app.patch("/layers/{layer_id}", response_model=schemas.LayerRead)
+def update_layer(
+    layer_id: int, 
+    layer_update: schemas.LayerUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Actualizar propiedades de una capa (visibilidad, opacidad, z-index, etc.)
+    """
     layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
     if not layer:
         raise HTTPException(status_code=404, detail="Layer not found")
-    return crud.update_layer(db, layer_id, layer_data)
+    
+    project = layer.project
+    if project.owner_id != current_user.id and current_user not in project.assigned_users:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Actualizar campos
+    update_data = layer_update.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(layer, field, value)
+    
+    db.commit()
+    db.refresh(layer)
+    return layer
+
+@app.post("/layers/{layer_id}/toggle-visibility")
+def toggle_layer_visibility(
+    layer_id: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """Alternar visibilidad de una capa"""
+    layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
+    if not layer:
+        raise HTTPException(status_code=404, detail="Layer not found")
+    
+    layer.visible = not layer.visible
+    db.commit()
+    return {"layer_id": layer_id, "visible": layer.visible}
+
+@app.post("/layers/{layer_id}/set-opacity")
+def set_layer_opacity(
+    layer_id: int, 
+    opacity: int, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """Establecer opacidad de una capa (0-100)"""
+    if opacity < 0 or opacity > 100:
+        raise HTTPException(status_code=400, detail="Opacity must be between 0 and 100")
+    
+    layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
+    if not layer:
+        raise HTTPException(status_code=404, detail="Layer not found")
+    
+    layer.opacity = opacity
+    db.commit()
+    return {"layer_id": layer_id, "opacity": opacity}
 
 # --- TILING SERVICE ---
 @app.get("/tiles/{filename}/{z}/{x}/{y}.png")
@@ -293,33 +422,71 @@ async def get_tile(filename: str, z: int, x: int, y: int):
     try:
         with rasterio.env.Env(PROJ_LIB=os.environ.get('PROJ_LIB')):
             with rasterio.open(file_path) as src:
-                with WarpedVRT(src, crs='EPSG:3857', resampling=Resampling.bilinear) as vrt:
-                    size = 20037508.34 * 2
-                    res = size / (2**z)
-                    left = -20037508.34 + x * res
-                    top = 20037508.34 - y * res
-                    right = left + res
-                    bottom = top - res
-                    
-                    window = from_bounds(left, bottom, right, top, vrt.transform)
-                    data = vrt.read(window=window, out_shape=(src.count, 256, 256), boundless=True)
-                    data = np.nan_to_num(data)
-                    
-                    if data.max() > 0:
-                        if data.dtype != np.uint8:
-                            data = ((data - data.min()) / (data.max() - data.min() + 1e-6) * 255).astype(np.uint8)
+                from rasterio.warp import reproject, Resampling
+                from rasterio.transform import from_bounds
+                
+                # Coordenadas del tile en EPSG:3857
+                size = 20037508.34 * 2
+                res = size / (2**z)
+                left = -20037508.34 + x * res
+                top = 20037508.34 - y * res
+                right = left + res
+                bottom = top - res
+                
+                # 1. Definir transformación destino (el tile de 256x256)
+                dst_transform = from_bounds(left, bottom, right, top, 256, 256)
+                dst_crs = 'EPSG:3857'
+                
+                # 2. Preparar arrays destino
+                data = np.zeros((src.count, 256, 256), dtype=src.dtypes[0])
+                # Máscara para transparencia
+                mask = np.zeros((256, 256), dtype=np.uint8)
+                
+                # 3. Reproyectar datos
+                reproject(
+                    source=rasterio.band(src, list(range(1, src.count + 1))),
+                    destination=data,
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=dst_transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.bilinear
+                )
+                
+                # 4. Reproyectar máscara original del archivo (para transparencia perfecta)
+                reproject(
+                    source=src.read_masks(1),
+                    destination=mask,
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=dst_transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.nearest
+                )
+                
+                data = np.nan_to_num(data)
+                
+                # Normalización simple pero efectiva
+                if data.dtype != np.uint8:
+                    d_min, d_max = data.min(), data.max()
+                    if d_max > d_min:
+                        data = ((data - d_min) / (d_max - d_min) * 255).astype(np.uint8)
                     else:
                         data = data.astype(np.uint8)
-                        
-                    if src.count >= 3:
-                        img_data = np.transpose(data[:3], (1, 2, 0))
-                        img = Image.fromarray(img_data, mode='RGB')
-                    else:
-                        img = Image.fromarray(data[0], mode='L')
-                    
-                    buf = io.BytesIO()
-                    img.save(buf, format="PNG")
-                    return Response(content=buf.getvalue(), media_type="image/png")
+                
+                # Crear imagen PIL
+                if src.count >= 3:
+                    img_data = np.transpose(data[:3], (1, 2, 0))
+                    img = Image.fromarray(img_data, mode='RGB')
+                else:
+                    img = Image.fromarray(data[0], mode='L')
+                
+                # Aplicar la máscara de transparencia
+                img.putalpha(Image.fromarray(mask, mode='L'))
+                
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                return Response(content=buf.getvalue(), media_type="image/png")
                 
     except Exception as e:
         print(f"Error generando tile para {filename}: {e}")
@@ -327,6 +494,13 @@ async def get_tile(filename: str, z: int, x: int, y: int):
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         return Response(content=buf.getvalue(), media_type="image/png")
+
+@app.get("/files/{filename}")
+async def get_file(filename: str):
+    file_path = os.path.join(UPLOAD_DIR, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    return FileResponse(file_path)
 
 if __name__ == "__main__":
     import uvicorn

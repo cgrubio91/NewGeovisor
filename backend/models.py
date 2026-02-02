@@ -68,7 +68,13 @@ class Layer(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True, nullable=False)
-    layer_type = Column(String, nullable=False)  # 'raster', 'vector', '3d_model'
+    
+    # Tipos soportados: 'raster', 'vector', '3d_model', 'point_cloud', 'cad', 'kml'
+    layer_type = Column(String, nullable=False)
+    
+    # Formato específico del archivo: 'tiff', 'geotiff', 'las', 'laz', 'obj', 'dwg', 'dxf', 'kmz', 'kml', 'shp', etc.
+    file_format = Column(String, nullable=True)
+    
     file_path = Column(String, nullable=False)
     crs = Column(String, nullable=True)
     
@@ -78,10 +84,17 @@ class Layer(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
     folder_id = Column(Integer, ForeignKey("folders.id", ondelete="SET NULL"), nullable=True)
     
+    # Control de visualización
+    visible = Column(Boolean, default=True, nullable=False)
+    opacity = Column(Integer, default=100, nullable=False)  # 0-100
+    z_index = Column(Integer, default=0, nullable=False)  # Orden de las capas
+    
     # Configuraciones adicionales en formato JSON
+    # Puede incluir: estilo, filtros, configuraciones específicas del formato, etc.
     settings = Column(JSON, nullable=True, default={}) 
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relaciones
     project = relationship("Project", back_populates="layers")
