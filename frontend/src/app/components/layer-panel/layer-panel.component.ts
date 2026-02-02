@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -311,11 +311,10 @@ export class LayerPanelComponent implements OnInit, OnDestroy {
 
   private subscriptions: Subscription[] = [];
 
-  constructor(
-    private layerService: LayerService,
-    private projectContext: ProjectContextService,
-    private baseMapService: BaseMapService
-  ) { }
+  private layerService = inject(LayerService);
+  private projectContext = inject(ProjectContextService);
+  private baseMapService = inject(BaseMapService);
+  private cdr = inject(ChangeDetectorRef);
 
   ngOnInit(): void {
     // Cargar mapas base disponibles
@@ -326,13 +325,16 @@ export class LayerPanelComponent implements OnInit, OnDestroy {
     this.subscriptions.push(
       this.layerService.layers$.subscribe(layers => {
         this.layers = layers;
+        this.cdr.detectChanges();
       })
     );
 
     // Cargar capas del proyecto actual
     const projectId = this.projectContext.getActiveProjectId();
     if (projectId) {
-      this.layerService.getProjectLayers(projectId).subscribe();
+      this.layerService.getProjectLayers(projectId).subscribe(() => {
+        this.cdr.detectChanges();
+      });
     }
   }
 

@@ -76,7 +76,7 @@ export class MapService {
     /**
      * Agrega una capa raster (XYZ/Tiles)
      */
-    addRasterLayer(name: string, url: string, extent?: number[], id?: number) {
+    addRasterLayer(name: string, url: string, extent?: number[], id?: number, folderId?: number | null) {
         // Transformar extent a la proyección del mapa (3857) si se proporciona en 4326
         let transformedExtent = extent;
         if (extent) {
@@ -97,7 +97,8 @@ export class MapService {
                 name: name,
                 id: id || name + Date.now(),
                 type: 'raster',
-                originalExtent: extent
+                originalExtent: extent,
+                folder_id: folderId
             }
         });
 
@@ -111,7 +112,7 @@ export class MapService {
     /**
      * Agrega una capa vector (GeoJSON)
      */
-    addVectorLayer(name: string, geojson: any, id?: number) {
+    addVectorLayer(name: string, geojson: any, id?: number, folderId?: number | null) {
         const vectorSource = new VectorSource({
             features: new GeoJSON().readFeatures(geojson, {
                 dataProjection: 'EPSG:4326',
@@ -125,7 +126,8 @@ export class MapService {
             properties: {
                 name: name,
                 id: id || name + Date.now(),
-                type: 'vector'
+                type: 'vector',
+                folder_id: folderId
             }
         });
 
@@ -133,7 +135,10 @@ export class MapService {
         this.zoomToExtent(vectorSource.getExtent(), 'EPSG:3857');
     }
 
-    addKmlLayer(name: string, url: string, id?: number) {
+    /**
+     * Agrega una capa KML
+     */
+    addKmlLayer(name: string, url: string, id?: number, folderId?: number | null) {
         const vectorSource = new VectorSource({
             url: url,
             format: new KML({ extractStyles: true })
@@ -145,7 +150,8 @@ export class MapService {
             properties: {
                 name: name,
                 id: id || name + Date.now(),
-                type: 'kml'
+                type: 'kml',
+                folder_id: folderId
             }
         });
 
@@ -207,6 +213,7 @@ export class MapService {
             type: l.get('type') || 'raster',
             visible: l.getVisible(),
             opacity: l.getOpacity(),
+            folder_id: l.get('folder_id'),
             instance: l
         }));
         this.layersChanged.next(this.layers);
@@ -217,7 +224,7 @@ export class MapService {
      * @param layerId Identificador de la capa
      * @param opacity Valor de opacidad (0-1)
      */
-    setLayerOpacity(layerId: string, opacity: number) {
+    setLayerOpacity(layerId: string | number, opacity: number) {
         const layer = this.layers.find(l => l.id === layerId);
         if (layer) {
             layer.instance.setOpacity(opacity);
@@ -227,9 +234,8 @@ export class MapService {
 
     /**
      * Alterna la visibilidad de una capa
-     * @param layerId Identificador de la capa
      */
-    toggleLayerVisibility(layerId: string) {
+    toggleLayerVisibility(layerId: string | number) {
         const layer = this.layers.find(l => l.id === layerId);
         if (layer) {
             // Si es una capa base, asegurar que solo una esté visible
@@ -246,14 +252,11 @@ export class MapService {
 
     /**
      * Activa la herramienta de comparación (swipe) para una capa
-     * La capa se recortará según la posición del swipe
-     * @param topLayerId Identificador de la capa a comparar
      */
-    enableSwipe(topLayerId: string) {
+    enableSwipe(topLayerId: string | number) {
         const topLayer = this.layers.find(l => l.id === topLayerId)?.instance;
         if (!topLayer) return;
 
-        // Evento antes de renderizar: aplicar clipping
         topLayer.on('prerender', (event: any) => {
             const ctx = event.context;
             const mapSize = this.map.getSize();
@@ -265,7 +268,6 @@ export class MapService {
             ctx.clip();
         });
 
-        // Evento después de renderizar: restaurar contexto
         topLayer.on('postrender', (event: any) => {
             const ctx = event.context;
             ctx.restore();
@@ -276,27 +278,15 @@ export class MapService {
 
     private swipePosition = 50;
 
-    /**
-     * Establece la posición de la herramienta de comparación
-     * @param pos Posición en porcentaje (0-100)
-     */
     setSwipePosition(pos: number) {
         this.swipePosition = pos;
         this.map.render();
     }
 
-    /**
-     * Obtiene la instancia del mapa
-     * @returns Instancia del mapa de OpenLayers
-     */
     getMap() {
         return this.map;
     }
 
-    /**
-     * Hace zoom a la extensión de una capa específica
-     * @param layer Instancia de la capa
-     */
     zoomToLayer(layer: any) {
         if (!this.map || !layer) return;
 
@@ -310,7 +300,6 @@ export class MapService {
         }
 
         if (extent) {
-            // Validar extent
             const isValidExtent = extent &&
                 extent[0] !== Infinity &&
                 extent[0] !== -Infinity &&
@@ -321,31 +310,21 @@ export class MapService {
                     padding: [50, 50, 50, 50],
                     duration: 1000
                 });
-            } else {
-                console.warn('MapService: No se puede hacer zoom a una capa sin extensión válida (capa vacía).');
             }
         }
     }
 
-    /**
-     * Hace zoom a una extensión específica
-     * @param extent Extensión [minX, minY, maxX, maxY]
-     * @param dataProjection Proyección de los datos (por defecto EPSG:4326)
-     */
     zoomToExtent(extent: number[], dataProjection: string = 'EPSG:4326') {
         if (!this.map || !extent) return;
 
-        // Validar que el extent tenga 4 números válidos y no sea infinito
         const isValid = extent.length === 4 &&
             extent.every(v => v !== null && v !== undefined && !isNaN(v));
 
-        // Evitar [0,0,0,0] o extents extremadamente pequeños/vacíos
         const isEmpty = Math.abs(extent[0] - extent[2]) < 0.000001 &&
             Math.abs(extent[1] - extent[3]) < 0.000001;
 
         if (isValid && !isEmpty) {
             try {
-                // Si el extent está en una proyección distinta a 3857, transformarlo
                 let fitExtent = extent;
                 if (dataProjection !== 'EPSG:3857') {
                     fitExtent = transformExtent(extent, dataProjection, 'EPSG:3857');
@@ -359,14 +338,10 @@ export class MapService {
             } catch (e) {
                 console.warn('MapService: Error fitting extent', e);
             }
-        } else {
-            console.warn('MapService: No se puede hacer zoom a una extensión inválida o vacía', extent);
         }
     }
-    /**
-     * Elimina una capa del mapa por su ID
-     */
-    removeLayer(id: string) {
+
+    removeLayer(id: string | number) {
         const layerIdx = this.layers.findIndex(l => l.id === id);
         if (layerIdx !== -1) {
             this.map.removeLayer(this.layers[layerIdx].instance);
@@ -374,9 +349,6 @@ export class MapService {
         }
     }
 
-    /**
-     * Hace zoom a la extensión combinada de todas las capas visibles
-     */
     zoomToAllLayers() {
         if (!this.map) return;
         const visibleLayers = this.layers.filter(l => l.visible && l.type !== 'base');
@@ -404,9 +376,6 @@ export class MapService {
         }
     }
 
-    /**
-     * Transforma una extensión entre dos proyecciones
-     */
     transformExtent(extent: number[], source: string, target: string): number[] {
         return transformExtent(extent, source, target);
     }

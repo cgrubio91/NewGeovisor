@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
@@ -33,6 +33,7 @@ export class UserManager implements OnInit {
   private authService = inject(AuthService);
   private projectService = inject(ProjectService);
   private toastService = inject(ToastService);
+  private cdr = inject(ChangeDetectorRef);
 
   ngOnInit() {
     this.loadUsers();
@@ -41,17 +42,30 @@ export class UserManager implements OnInit {
 
   loadUsers() {
     this.isLoading = true;
+    this.cdr.detectChanges();
     this.authService.getUsers()
-      .pipe(finalize(() => this.isLoading = false))
+      .pipe(finalize(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }))
       .subscribe({
-        next: (data) => this.users = data,
-        error: (err) => this.toastService.show('Error al cargar usuarios', 'error')
+        next: (data) => {
+          this.users = [...data];
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          this.toastService.show('Error al cargar usuarios', 'error');
+        }
       });
   }
 
   loadAllProjects() {
     this.projectService.getProjects().subscribe({
-      next: (data) => this.projects = data
+      next: (data) => {
+        this.projects = data;
+        this.cdr.detectChanges();
+      },
+      error: (err) => console.error('Error cargando proyectos', err)
     });
   }
 
@@ -62,20 +76,25 @@ export class UserManager implements OnInit {
     }
 
     this.isLoading = true;
+    this.cdr.detectChanges();
     this.authService.createUser({
       username: this.newUsername,
       email: this.newEmail,
       full_name: this.newFullName,
       password: this.newPassword
-    }).pipe(finalize(() => this.isLoading = false))
+    }).pipe(finalize(() => {
+      this.isLoading = false;
+      this.cdr.detectChanges();
+    }))
       .subscribe({
         next: (user) => {
-          this.users = [...this.users, user];
+          this.users = [user, ...this.users];
           this.toastService.show('Usuario creado exitosamente', 'success');
           this.resetForm();
           this.showCreateForm = false;
+          this.loadUsers();
         },
-        error: (err) => this.toastService.show('Error al crear usuario: ' + (err.error?.detail || 'Intente otro username/email'), 'error')
+        error: (err) => this.toastService.show('Error al crear usuario', 'error')
       });
   }
 
@@ -90,6 +109,8 @@ export class UserManager implements OnInit {
       next: () => {
         this.users = this.users.filter(u => u.id !== user.id);
         this.toastService.show('Usuario eliminado', 'success');
+        if (this.selectedUserId === user.id) this.selectedUserId = null;
+        this.cdr.detectChanges();
       }
     });
   }
@@ -100,14 +121,23 @@ export class UserManager implements OnInit {
       return;
     }
 
-    this.projectService.assignUserToProject(this.selectedUserId, this.selectedProjectId).subscribe({
-      next: () => {
-        this.toastService.show('Proyecto asignado correctamente', 'success');
-        this.selectedUserId = null;
-        this.selectedProjectId = null;
-      },
-      error: (err) => this.toastService.show('Error en la asignación', 'error')
-    });
+    this.isLoading = true;
+    this.cdr.detectChanges();
+    this.projectService.assignUserToProject(this.selectedUserId, this.selectedProjectId)
+      .pipe(finalize(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }))
+      .subscribe({
+        next: () => {
+          this.toastService.show('Proyecto asignado correctamente', 'success');
+          this.selectedProjectId = null;
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          this.toastService.show('Error en la asignación', 'error');
+        }
+      });
   }
 
   resetForm() {

@@ -180,3 +180,38 @@ def delete_layer(db: Session, layer_id: int):
         db.delete(db_layer)
         db.commit()
     return db_layer
+
+def get_dashboard_stats(db: Session):
+    """
+    Obtiene estadísticas globales para el dashboard digno.
+    """
+    user_count = db.query(func.count(User.id)).scalar()
+    project_count = db.query(func.count(Project.id)).scalar()
+    layer_count = db.query(func.count(Layer.id)).scalar()
+    
+    # Proyectos más visitados
+    top_projects = db.query(Project.name, Project.visit_count)\
+        .order_by(Project.visit_count.desc())\
+        .limit(5).all()
+    
+    # Usuarios más activos
+    top_users = db.query(User.username, User.login_count)\
+        .order_by(User.login_count.desc())\
+        .limit(5).all()
+        
+    # Tamaño de la base de datos (PostgreSQL específico)
+    db_size = "N/A"
+    try:
+        size_query = db.execute(func.pg_size_pretty(func.pg_database_size('geovisor_db')))
+        db_size = size_query.scalar()
+    except:
+        pass
+
+    return {
+        "users": user_count,
+        "projects": project_count,
+        "layers": layer_count,
+        "db_size": db_size,
+        "top_projects": [{"name": p[0], "visits": p[1]} for p in top_projects],
+        "top_users": [{"name": u[0], "logins": u[1]} for u in top_users]
+    }

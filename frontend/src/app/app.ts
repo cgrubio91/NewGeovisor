@@ -9,7 +9,10 @@ import { ToastComponent } from './components/toast/toast.component';
 import { Map3dComponent } from './components/map3d/map3d.component';
 import { UserManager } from './components/user-manager/user-manager';
 import { LoginComponent } from './components/login/login';
+import { DashboardComponent } from './components/dashboard/dashboard';
 import { AuthService } from './services/auth.service';
+import { finalize } from 'rxjs/operators';
+import { Output, EventEmitter } from '@angular/core';
 
 @Component({
   selector: 'app-root',
@@ -24,7 +27,8 @@ import { AuthService } from './services/auth.service';
     ToastComponent,
     Map3dComponent,
     UserManager,
-    LoginComponent
+    LoginComponent,
+    DashboardComponent
   ],
   template: `
     <app-toast></app-toast>
@@ -57,8 +61,12 @@ import { AuthService } from './services/auth.service';
             <app-upload></app-upload>
         </ng-container>
 
-        <ng-container *ngIf="currentView === 'projects' || currentView === 'dashboard'">
+        <ng-container *ngIf="currentView === 'projects'">
             <app-project-manager (onNavigate)="currentView = $event"></app-project-manager>
+        </ng-container>
+
+        <ng-container *ngIf="currentView === 'dashboard'">
+            <app-dashboard></app-dashboard>
         </ng-container>
 
         <ng-container *ngIf="currentView === 'users'">

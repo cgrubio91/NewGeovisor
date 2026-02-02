@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ProjectService } from '../../services/project.service';
@@ -34,6 +34,7 @@ export class ProjectManager implements OnInit {
   private toastService = inject(ToastService);
   private projectContext = inject(ProjectContextService);
   private authService = inject(AuthService);
+  private cdr = inject(ChangeDetectorRef);
 
   ngOnInit() {
     this.loadProjects();
@@ -41,11 +42,16 @@ export class ProjectManager implements OnInit {
 
   loadProjects() {
     this.isLoading = true;
+    this.cdr.detectChanges();
     this.projectService.getProjects()
-      .pipe(finalize(() => this.isLoading = false))
+      .pipe(finalize(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }))
       .subscribe({
         next: (data) => {
           this.projects = data;
+          this.cdr.detectChanges();
         },
         error: (err) => {
           console.error('Error loading projects', err);
@@ -56,6 +62,7 @@ export class ProjectManager implements OnInit {
 
   toggleCreateForm() {
     this.showCreateForm = !this.showCreateForm;
+    this.cdr.detectChanges();
   }
 
   createProject() {
@@ -65,6 +72,7 @@ export class ProjectManager implements OnInit {
     }
 
     this.isLoading = true;
+    this.cdr.detectChanges();
     this.projectService.createProject({
       name: this.newProjectName,
       description: this.newProjectDesc,
@@ -73,13 +81,17 @@ export class ProjectManager implements OnInit {
       start_date: this.newProjectStart ? new Date(this.newProjectStart).toISOString() : undefined,
       end_date: this.newProjectEnd ? new Date(this.newProjectEnd).toISOString() : undefined
     })
-      .pipe(finalize(() => this.isLoading = false))
+      .pipe(finalize(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }))
       .subscribe({
         next: (project) => {
           this.projects = [project, ...this.projects];
           this.toastService.show('Proyecto creado exitosamente', 'success');
           this.resetForm();
           this.showCreateForm = false;
+          this.cdr.detectChanges();
         },
         error: (err) => {
           console.error('Error creating project', err);
@@ -92,8 +104,12 @@ export class ProjectManager implements OnInit {
     if (!confirm(`¿Eliminar el proyecto "${project.name}"? Esta acción borrará todas sus capas.`)) return;
 
     this.isLoading = true;
+    this.cdr.detectChanges();
     this.projectService.deleteProject(project.id)
-      .pipe(finalize(() => this.isLoading = false))
+      .pipe(finalize(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }))
       .subscribe({
         next: () => {
           this.projects = this.projects.filter(p => p.id !== project.id);
@@ -101,6 +117,11 @@ export class ProjectManager implements OnInit {
           if (this.projectContext.getActiveProjectId() === project.id) {
             this.projectContext.setActiveProject(null);
           }
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          console.error('Error deleting project', err);
+          this.toastService.show('Error al eliminar el proyecto', 'error');
         }
       });
   }
@@ -112,6 +133,7 @@ export class ProjectManager implements OnInit {
     this.newProjectPhoto = '';
     this.newProjectStart = '';
     this.newProjectEnd = '';
+    this.cdr.detectChanges();
   }
 
   selectProject(project: Project) {

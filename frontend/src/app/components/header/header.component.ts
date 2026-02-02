@@ -49,13 +49,6 @@ import { CommonModule } from '@angular/common';
             <span>Visor de Mapas</span>
           </button>
           
-          <button class="nav-item" [class.active]="activeTab === 'analysis'" (click)="navigate('analysis')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-            </svg>
-            <span>Análisis</span>
-          </button>
-
           <button class="nav-item" [class.active]="activeTab === 'users'" (click)="navigate('users')">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>

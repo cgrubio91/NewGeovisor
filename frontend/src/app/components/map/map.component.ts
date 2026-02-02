@@ -82,13 +82,13 @@ export class MapComponent implements OnInit, AfterViewInit {
           extent = undefined;
         }
 
-        this.mapService.addRasterLayer(layer.name, tileUrl, extent, layer.id);
+        this.mapService.addRasterLayer(layer.name, tileUrl, extent, layer.id, layer.folder_id);
       } else if (layer.layer_type === 'vector') {
-        this.mapService.addVectorLayer(layer.name, metadata, layer.id);
+        this.mapService.addVectorLayer(layer.name, metadata, layer.id, layer.folder_id);
       } else if (layer.layer_type === 'kml') {
         const filename = layer.file_path.split(/[\\/]/).pop();
         const kmlUrl = `${this.apiService.getApiUrl()}/files/${filename}`;
-        this.mapService.addKmlLayer(layer.name, kmlUrl, layer.id);
+        this.mapService.addKmlLayer(layer.name, kmlUrl, layer.id, layer.folder_id);
       }
     });
   }

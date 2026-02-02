@@ -117,6 +117,11 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # Actualizar contador de inicios de sesión
+    user.login_count = (user.login_count or 0) + 1
+    user.last_login = datetime.utcnow()
+    db.commit()
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
@@ -144,10 +149,10 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username already taken")
     return crud.create_user(db=db, user=user)
 
-@app.delete("/users/{user_id}")
+@app.delete("/users/{user_id}", response_model=schemas.UserRead)
 def delete_user(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     if not current_user.is_superuser and current_user.id != user_id:
-         raise HTTPException(status_code=403, detail="Not enough permissions")
+         raise HTTPException(status_code=403, detail="Not enough permissions to delete this user")
     return crud.delete_user(db, user_id)
 
 # --- PROJECT ENDPOINTS ---
@@ -166,16 +171,45 @@ def read_project(project_id: int, db: Session = Depends(get_db), current_user: m
         raise HTTPException(status_code=404, detail="Project not found")
     if project.owner_id != current_user.id and current_user not in project.assigned_users:
         raise HTTPException(status_code=403, detail="Access denied")
+    # Incrementar contador de visitas
+    project.visit_count = (project.visit_count or 0) + 1
+    db.commit()
+    db.refresh(project)
+    
     return project
+
+@app.post("/projects/assign")
+def assign_project(assignment: schemas.ProjectAssign, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Asignar un usuario a un proyecto"""
+    project = db.query(models.Project).filter(models.Project.id == assignment.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    # Solo el dueño puede asignar o un admin
+    if project.owner_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only owner or admin can assign users")
+        
+    crud.assign_user_to_project(db, assignment.user_id, assignment.project_id)
+    return {"message": "User assigned to project successfully"}
 
 @app.delete("/projects/{project_id}")
 def delete_project(project_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    project = db.query(models.Project).filter(models.Project.id == project_id).first()
-    if not project:
+    # Buscar solo el ID y owner_id para el chequeo de permisos minimizando carga de relaciones
+    project_data = db.query(models.Project.id, models.Project.owner_id).filter(models.Project.id == project_id).first()
+    
+    if not project_data:
         raise HTTPException(status_code=404, detail="Project not found")
-    if project.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only owner can delete project")
-    return crud.delete_project(db, project_id)
+        
+    if project_data.owner_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only owner or admin can delete project")
+        
+    crud.delete_project(db, project_id)
+    return {"message": "Project deleted successfully"}
+
+@app.get("/dashboard/stats")
+def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Obtener estadísticas dignas para el dashboard"""
+    return crud.get_dashboard_stats(db)
 
 # --- FOLDER ENDPOINTS ---
 @app.post("/folders/", response_model=schemas.FolderRead)
@@ -191,7 +225,8 @@ def read_folders(project_id: int, db: Session = Depends(get_db), current_user: m
 
 @app.delete("/folders/{folder_id}")
 def delete_folder(folder_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return crud.delete_folder(db, folder_id)
+    crud.delete_folder(db, folder_id)
+    return {"message": "Folder deleted successfully", "id": folder_id}
 
 # --- UPLOAD ENDPOINT ---
 @app.post("/upload")
@@ -349,7 +384,8 @@ def delete_layer(layer_id: int, db: Session = Depends(get_db), current_user: mod
     project = layer.project
     if project.owner_id != current_user.id and current_user not in project.assigned_users:
         raise HTTPException(status_code=403, detail="Access denied")
-    return crud.delete_layer(db, layer_id)
+    crud.delete_layer(db, layer_id)
+    return {"message": "Layer deleted successfully", "id": layer_id}
 
 @app.patch("/layers/{layer_id}", response_model=schemas.LayerRead)
 def update_layer(

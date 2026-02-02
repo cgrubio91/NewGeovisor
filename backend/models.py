@@ -23,6 +23,10 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_superuser = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Nuevos campos para métricas
+    login_count = Column(Integer, default=0)
+    last_login = Column(DateTime(timezone=True), nullable=True)
 
     # Relaciones
     owned_projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
@@ -38,6 +42,9 @@ class Project(Base):
     start_date = Column(DateTime(timezone=True), nullable=True)
     end_date = Column(DateTime(timezone=True), nullable=True)
     photo_url = Column(String, nullable=True)
+    
+    # Nuevo campo para métricas
+    visit_count = Column(Integer, default=0)
     
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
