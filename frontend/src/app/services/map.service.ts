@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import Map from 'ol/Map';
+import OlMap from 'ol/Map';
 
 import View from 'ol/View';
 import TileLayer from 'ol/layer/Tile';
@@ -12,7 +12,7 @@ import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import { register } from 'ol/proj/proj4';
 import proj4 from 'proj4';
-import { Subject } from 'rxjs';
+import { Subject, BehaviorSubject } from 'rxjs';
 import { Style, Fill, Stroke, Text, Circle as CircleStyle } from 'ol/style';
 
 // Register all available proj4 definitions
@@ -27,11 +27,21 @@ register(proj4);
     providedIn: 'root'
 })
 export class MapService {
-    private map!: Map;
+    private map!: OlMap;
     private layers: any[] = [];
-    public layersChanged = new Subject<any[]>();
+    public layersChanged = new BehaviorSubject<any[]>([]);
+    public compareToolTrigger = new Subject<string | number | null>();
 
     constructor() { }
+
+    getLayers() {
+        return this.layers;
+    }
+
+    openCompareTool(layerId: string | number | null = null) {
+        console.log('MapService: Emitting compareToolTrigger with id:', layerId);
+        this.compareToolTrigger.next(layerId);
+    }
 
     /**
      * Inicializa el mapa con configuración por defecto
@@ -39,7 +49,7 @@ export class MapService {
      * @returns Instancia del mapa creado
      */
     initMap(target: string) {
-        this.map = new Map({
+        this.map = new OlMap({
             target: target,
             layers: [
                 new TileLayer({
@@ -265,27 +275,58 @@ export class MapService {
     /**
      * Activa la herramienta de comparación (swipe) para una capa
      */
-    enableSwipe(topLayerId: string | number) {
-        const topLayer = this.layers.find(l => l.id === topLayerId)?.instance;
-        if (!topLayer) return;
+    private swipeListeners = new Map<string, { prerender: any, postrender: any }>();
 
-        topLayer.on('prerender', (event: any) => {
+    /**
+     * Activa la herramienta de comparación (swipe) para una capa
+     */
+    enableSwipe(layerId: string | number) {
+        const key = String(layerId);
+        if (this.swipeListeners.has(key)) return;
+
+        const layer = this.layers.find(l => l.id === layerId)?.instance;
+        if (!layer) return;
+
+        const prerender = (event: any) => {
             const ctx = event.context;
             const mapSize = this.map.getSize();
             if (!mapSize) return;
             const width = mapSize[0] * (this.swipePosition / 100);
+
             ctx.save();
             ctx.beginPath();
             ctx.rect(0, 0, width, mapSize[1]);
             ctx.clip();
-        });
+        };
 
-        topLayer.on('postrender', (event: any) => {
+        const postrender = (event: any) => {
             const ctx = event.context;
             ctx.restore();
-        });
+        };
 
+        layer.on('prerender', prerender);
+        layer.on('postrender', postrender);
+
+        this.swipeListeners.set(key, { prerender, postrender });
         this.map.render();
+    }
+
+    /**
+     * Desactiva la herramienta de comparación para una capa
+     */
+    disableSwipe(layerId: string | number) {
+        const key = String(layerId);
+        const listeners = this.swipeListeners.get(key);
+
+        if (listeners) {
+            const layer = this.layers.find(l => l.id === layerId)?.instance;
+            if (layer) {
+                layer.un('prerender', listeners.prerender);
+                layer.un('postrender', listeners.postrender);
+            }
+            this.swipeListeners.delete(key);
+            this.map.render();
+        }
     }
 
     private swipePosition = 50;

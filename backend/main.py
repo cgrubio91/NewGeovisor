@@ -406,7 +406,7 @@ def update_layer(
         raise HTTPException(status_code=403, detail="Access denied")
     
     # Actualizar campos
-    update_data = layer_update.dict(exclude_unset=True)
+    update_data = layer_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(layer, field, value)
     

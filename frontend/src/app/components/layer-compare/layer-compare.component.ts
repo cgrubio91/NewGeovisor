@@ -1,12 +1,23 @@
-import { Component, OnInit, Input, ElementRef, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, OnInit, OnDestroy, ElementRef, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { MapService } from '../../services/map.service';
+import { Map3dService } from '../../services/map3d.service';
+import { Subscription } from 'rxjs';
 
 @Component({
-    selector: 'app-layer-compare',
-    standalone: true,
-    imports: [CommonModule, FormsModule],
-    template: `
+  selector: 'app-layer-compare',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: `
+    <!-- Debug button to test if component renders -->
+    <button class="debug-btn" (click)="debugToggle()" 
+            style="position: fixed; top: 60px; right: 20px; z-index: 9999; 
+                   padding: 10px 15px; background: #00c1d2; color: white; 
+                   border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
+      {{ isActive ? 'Cerrar Comparar' : 'Abrir Comparar' }}
+    </button>
+    
     <div class="compare-container" *ngIf="isActive">
       <div class="compare-header">
         <h4>Comparar Capas</h4>
@@ -15,9 +26,9 @@ import { FormsModule } from '@angular/forms';
 
       <div class="compare-controls">
         <div class="control-group">
-          <label>Capa Izquierda:</label>
+          <label>Capa Superior (Izquierda):</label>
           <select [(ngModel)]="leftLayerId" (change)="onLayerChange()">
-            <option [value]="null">Seleccionar capa...</option>
+            <option [ngValue]="null">Seleccionar capa...</option>
             <option *ngFor="let layer of availableLayers" [value]="layer.id">
               {{ layer.name }}
             </option>
@@ -25,9 +36,9 @@ import { FormsModule } from '@angular/forms';
         </div>
 
         <div class="control-group">
-          <label>Capa Derecha:</label>
+          <label>Capa Base (Derecha):</label>
           <select [(ngModel)]="rightLayerId" (change)="onLayerChange()">
-            <option [value]="null">Seleccionar capa...</option>
+            <option [ngValue]="null">Seleccionar capa...</option>
             <option *ngFor="let layer of availableLayers" [value]="layer.id">
               {{ layer.name }}
             </option>
@@ -51,19 +62,12 @@ import { FormsModule } from '@angular/forms';
             >
               <i class="icon-layers"></i> Opacidad
             </button>
-            <button 
-              [class.active]="compareMode === 'split'"
-              (click)="setCompareMode('split')"
-              class="mode-btn"
-            >
-              <i class="icon-split"></i> División
-            </button>
           </div>
         </div>
 
         <!-- Control de cortinilla -->
         <div class="control-group" *ngIf="compareMode === 'swipe'">
-          <label>Posición de Cortinilla: {{ swipePosition }}%</label>
+          <label>Posición: {{ swipePosition }}%</label>
           <input 
             type="range" 
             min="0" 
@@ -86,90 +90,66 @@ import { FormsModule } from '@angular/forms';
             class="opacity-slider"
           />
         </div>
-
-        <!-- Control de división para modo split -->
-        <div class="control-group" *ngIf="compareMode === 'split'">
-          <label>Orientación:</label>
-          <div class="mode-buttons">
-            <button 
-              [class.active]="splitOrientation === 'vertical'"
-              (click)="setSplitOrientation('vertical')"
-              class="mode-btn"
-            >
-              Vertical
-            </button>
-            <button 
-              [class.active]="splitOrientation === 'horizontal'"
-              (click)="setSplitOrientation('horizontal')"
-              class="mode-btn"
-            >
-              Horizontal
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Visualización de la comparación -->
-      <div class="compare-preview" #comparePreview>
-        <div class="preview-info">
-          <span class="layer-label left">{{ getLayerName(leftLayerId) }}</span>
-          <span class="layer-label right">{{ getLayerName(rightLayerId) }}</span>
-        </div>
       </div>
     </div>
+
+    <!-- Visual Swipe Line Overlay -->
+    <div class="swipe-visual-line" 
+         *ngIf="isActive && compareMode === 'swipe'" 
+         [style.left.%]="swipePosition"
+         (mousedown)="startDrag($event)"
+         (touchstart)="startDrag($event)">
+         <div class="swipe-handle">
+             <i class="fas fa-arrows-alt-h"></i>
+         </div>
+    </div>
   `,
-    styles: [`
+  styles: [`
     .compare-container {
       position: absolute;
-      top: 80px;
+      top: 100px;
       right: 20px;
-      width: 350px;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      width: 320px;
+      background: rgba(10, 25, 41, 0.95);
+      backdrop-filter: blur(12px);
+      border-radius: 12px;
+      border: 1px solid rgba(0, 193, 210, 0.4);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
       z-index: 1000;
       overflow: hidden;
+      font-family: 'Outfit', sans-serif;
     }
 
     .compare-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 16px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
+      padding: 14px 16px;
+      background: rgba(0, 193, 210, 0.1);
+      border-bottom: 1px solid rgba(0, 193, 210, 0.2);
+      color: #00c1d2;
     }
 
     .compare-header h4 {
       margin: 0;
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
     }
 
     .btn-close {
       background: none;
       border: none;
-      color: white;
-      font-size: 24px;
+      color: #94a3b8;
+      font-size: 22px;
       cursor: pointer;
       padding: 0;
-      width: 30px;
-      height: 30px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 4px;
-      transition: background 0.2s;
+      line-height: 1;
+      transition: color 0.2s;
     }
-
-    .btn-close:hover {
-      background: rgba(255,255,255,0.2);
-    }
+    .btn-close:hover { color: #ef4444; }
 
     .compare-controls {
       padding: 16px;
-      max-height: 500px;
-      overflow-y: auto;
     }
 
     .control-group {
@@ -178,19 +158,24 @@ import { FormsModule } from '@angular/forms';
 
     .control-group label {
       display: block;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       font-weight: 500;
-      color: #333;
-      font-size: 14px;
+      color: #94a3b8;
+      font-size: 12px;
     }
 
     .control-group select {
       width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 14px;
-      background: white;
+      padding: 10px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 6px;
+      font-size: 13px;
+      background: rgba(0,0,0,0.2);
+      color: white;
+    }
+    .control-group select:focus {
+      outline: none;
+      border-color: #00c1d2;
     }
 
     .mode-buttons {
@@ -200,154 +185,285 @@ import { FormsModule } from '@angular/forms';
 
     .mode-btn {
       flex: 1;
-      padding: 8px 12px;
-      border: 1px solid #ddd;
-      background: white;
-      border-radius: 4px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(0,0,0,0.2);
+      border-radius: 6px;
       cursor: pointer;
       font-size: 13px;
+      color: #94a3b8;
       transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-    }
-
-    .mode-btn:hover {
-      background: #f5f5f5;
-      border-color: #667eea;
     }
 
     .mode-btn.active {
-      background: #667eea;
+      background: rgba(0, 193, 210, 0.2);
+      color: #00c1d2;
+      border-color: #00c1d2;
+    }
+    .mode-btn:hover:not(.active) {
+      background: rgba(255,255,255,0.05);
       color: white;
-      border-color: #667eea;
     }
 
-    .swipe-slider,
-    .opacity-slider {
-      width: 100%;
-      cursor: pointer;
+    input[type=range] {
+        width: 100%;
+        cursor: pointer;
+        accent-color: #00c1d2;
     }
 
-    .compare-preview {
-      position: relative;
-      height: 200px;
-      background: #f5f5f5;
-      border-top: 1px solid #e0e0e0;
-    }
-
-    .preview-info {
-      position: absolute;
+    /* Swipe Visual Line */
+    .swipe-visual-line {
+      position: fixed;
       top: 0;
-      left: 0;
-      right: 0;
+      bottom: 0;
+      width: 4px;
+      background: linear-gradient(to bottom, #00c1d2 0%, rgba(0,193,210,0.5) 50%, #00c1d2 100%);
+      z-index: 999;
+      pointer-events: auto;
+      cursor: col-resize;
+      box-shadow: 0 0 10px rgba(0,193,210,0.5);
+    }
+    
+    .swipe-handle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 36px;
+      height: 36px;
+      background: rgba(10, 25, 41, 0.95);
+      border: 2px solid #00c1d2;
+      border-radius: 50%;
       display: flex;
-      justify-content: space-between;
-      padding: 8px;
-      background: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
-      z-index: 10;
-    }
-
-    .layer-label {
-      font-size: 12px;
-      color: white;
-      background: rgba(0,0,0,0.6);
-      padding: 4px 8px;
-      border-radius: 4px;
-    }
-
-    .layer-label.left {
-      margin-right: auto;
-    }
-
-    .layer-label.right {
-      margin-left: auto;
+      align-items: center;
+      justify-content: center;
+      color: #00c1d2;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+      font-size: 14px;
     }
   `]
 })
-export class LayerCompareComponent implements OnInit, AfterViewInit {
-    @Input() availableLayers: any[] = [];
-    @ViewChild('comparePreview') comparePreview!: ElementRef;
+export class LayerCompareComponent implements OnInit, OnDestroy {
+  availableLayers: any[] = [];
+  isActive: boolean = false;
+  leftLayerId: any = null;
+  rightLayerId: any = null;
+  compareMode: 'swipe' | 'opacity' = 'swipe';
+  swipePosition: number = 50;
+  overlayOpacity: number = 50;
 
-    isActive: boolean = false;
-    leftLayerId: number | null = null;
-    rightLayerId: number | null = null;
-    compareMode: 'swipe' | 'opacity' | 'split' = 'swipe';
-    swipePosition: number = 50;
-    overlayOpacity: number = 50;
-    splitOrientation: 'vertical' | 'horizontal' = 'vertical';
+  private layersSub: Subscription | undefined;
+  private compareSub: Subscription | undefined;
 
-    ngOnInit(): void {
-        // Inicialización
-    }
+  private dragActive = false;
 
-    ngAfterViewInit(): void {
-        // Configuración después de la vista
-    }
+  constructor(
+    private mapService: MapService,
+    private map3dService: Map3dService,
+    private cdr: ChangeDetectorRef
+  ) { }
 
-    openCompare(): void {
+  ngOnInit(): void {
+    this.layersSub = this.mapService.layersChanged.subscribe(layers => {
+      this.availableLayers = layers;
+    });
+
+    this.compareSub = this.mapService.compareToolTrigger.subscribe(layerId => {
+      console.log('Layer Compare Component: Received trigger for layer', layerId);
+      if (layerId !== undefined) {
         this.isActive = true;
-    }
+        this.leftLayerId = layerId;
 
-    closeCompare(): void {
-        this.isActive = false;
-        this.resetComparison();
-    }
+        // Find another visible layer for comparison
+        const otherLayer = this.availableLayers.find(l => l.id !== layerId && l.visible && l.type !== 'base');
+        console.log('Layer Compare: Left Layer', this.leftLayerId, 'Right Layer', otherLayer?.id);
 
-    setCompareMode(mode: 'swipe' | 'opacity' | 'split'): void {
-        this.compareMode = mode;
-        this.applyComparison();
-    }
-
-    setSplitOrientation(orientation: 'vertical' | 'horizontal'): void {
-        this.splitOrientation = orientation;
-        this.applyComparison();
-    }
-
-    onLayerChange(): void {
-        if (this.leftLayerId && this.rightLayerId) {
-            this.applyComparison();
-        }
-    }
-
-    onSwipeChange(): void {
-        this.applyComparison();
-    }
-
-    onOpacityChange(): void {
-        this.applyComparison();
-    }
-
-    applyComparison(): void {
-        if (!this.leftLayerId || !this.rightLayerId) {
-            return;
+        if (otherLayer) {
+          this.rightLayerId = otherLayer.id;
         }
 
-        // Emitir evento para que el componente del mapa aplique la comparación
-        const comparisonConfig = {
-            leftLayerId: this.leftLayerId,
-            rightLayerId: this.rightLayerId,
-            mode: this.compareMode,
-            swipePosition: this.swipePosition,
-            overlayOpacity: this.overlayOpacity,
-            splitOrientation: this.splitOrientation
-        };
+        this.applyComparison();
+        this.cdr.detectChanges(); // Force Angular to update the view
+        console.log('Layer Compare: isActive =', this.isActive);
+      }
+    });
 
-        // Aquí se debería emitir un evento o llamar a un servicio
-        console.log('Applying comparison:', comparisonConfig);
+    // Add global event listeners for drag
+    window.addEventListener('mousemove', this.onDrag.bind(this));
+    window.addEventListener('mouseup', this.endDrag.bind(this));
+    window.addEventListener('touchmove', this.onDrag.bind(this));
+    window.addEventListener('touchend', this.endDrag.bind(this));
+  }
+
+  ngOnDestroy(): void {
+    if (this.layersSub) {
+      this.layersSub.unsubscribe();
+    }
+    if (this.compareSub) {
+      this.compareSub.unsubscribe();
+    }
+    this.resetComparison(); // Ensure cleanup
+
+    // Remove event listeners
+    window.removeEventListener('mousemove', this.onDrag.bind(this));
+    window.removeEventListener('mouseup', this.endDrag.bind(this));
+    window.removeEventListener('touchmove', this.onDrag.bind(this));
+    window.removeEventListener('touchend', this.endDrag.bind(this));
+  }
+
+  startDrag(event: MouseEvent | TouchEvent): void {
+    this.dragActive = true;
+    event.preventDefault(); // Prevent text selection
+  }
+
+  onDrag(event: MouseEvent | TouchEvent): void {
+    if (!this.dragActive) return;
+
+    let clientX;
+    if (event instanceof MouseEvent) {
+      clientX = event.clientX;
+    } else {
+      clientX = event.touches[0].clientX;
     }
 
-    resetComparison(): void {
-        this.leftLayerId = null;
-        this.rightLayerId = null;
-        this.swipePosition = 50;
-        this.overlayOpacity = 50;
+    const width = window.innerWidth;
+    let percent = (clientX / width) * 100;
+    percent = Math.max(0, Math.min(100, percent));
+
+    this.swipePosition = percent;
+    this.onSwipeChange();
+  }
+
+  endDrag(): void {
+    this.dragActive = false;
+  }
+
+
+
+  openCompare(): void {
+    this.isActive = true;
+  }
+
+  closeCompare(): void {
+    this.isActive = false;
+    this.resetComparison();
+  }
+
+  setCompareMode(mode: 'swipe' | 'opacity'): void {
+    this.compareMode = mode;
+    // Clean up previous mode effects
+    if (this.leftLayerId) {
+      this.mapService.disableSwipe(this.leftLayerId);
+      this.map3dService.disableSwipe(this.leftLayerId);
+      this.mapService.setLayerOpacity(this.leftLayerId, 1);
+    }
+    this.applyComparison();
+  }
+
+  onLayerChange(): void {
+    // If we change layers, we should reset the effects on old layers
+    // This is tricky without tracking old IDs.
+    // For simplicity, we disable swipe on all available layers or just ensure applyComparison handles it.
+    // Better: applyComparison() logic should handle state, but here we assume users select and we re-apply.
+    // To be safe, we can disable swipe on everything before reapplying.
+
+    this.availableLayers.forEach(l => {
+      this.mapService.disableSwipe(l.id);
+      this.map3dService.disableSwipe(l.id);
+      // Note: this might reset opacity if we forced it? No, disableSwipe only removes listener.
+      // We should probably reset opacity to 1 or previous state if we were in opacity mode.
+      // But we don't know previous state.
+    });
+
+    this.applyComparison();
+  }
+
+  onSwipeChange(): void {
+    if (this.compareMode === 'swipe') {
+      this.mapService.setSwipePosition(this.swipePosition);
+      this.map3dService.setSwipePosition(this.swipePosition);
+    }
+  }
+
+  onOpacityChange(): void {
+    if (this.compareMode === 'opacity' && this.leftLayerId) {
+      this.mapService.setLayerOpacity(this.leftLayerId, this.overlayOpacity / 100);
+    }
+  }
+
+  applyComparison(): void {
+    if (!this.leftLayerId || !this.rightLayerId) return;
+
+    // Ensure visibility
+    const leftLayer = this.availableLayers.find(l => l.id == this.leftLayerId);
+    const rightLayer = this.availableLayers.find(l => l.id == this.rightLayerId);
+
+    if (leftLayer && !leftLayer.visible) this.mapService.toggleLayerVisibility(leftLayer.id);
+    if (rightLayer && !rightLayer.visible) this.mapService.toggleLayerVisibility(rightLayer.id);
+
+    if (this.compareMode === 'swipe') {
+      // Swipe Mode
+      // Left Layer (Top) gets Swipe applied
+      // Right Layer (Bottom) is just below
+      // Set Z-Indexes
+      this.mapService.setLayerZIndex(this.rightLayerId, 100);
+      this.mapService.setLayerZIndex(this.leftLayerId, 200);
+
+      // Reset opacity to 1 for swipe
+      this.mapService.setLayerOpacity(this.leftLayerId, 1);
+      this.mapService.setLayerOpacity(this.rightLayerId, 1);
+
+      // Enable swipe on top layer (2D)
+      this.mapService.enableSwipe(this.leftLayerId);
+      this.mapService.setSwipePosition(this.swipePosition);
+
+      // Enable swipe on top layer (3D)
+      this.map3dService.enableSwipe(this.leftLayerId);
+      this.map3dService.setSwipePosition(this.swipePosition);
+
+    } else if (this.compareMode === 'opacity') {
+      // Opacity Mode
+      // Left Layer (Top) has variable opacity
+      // Right Layer (Bottom) is opaque
+
+      this.mapService.setLayerZIndex(this.rightLayerId, 100);
+      this.mapService.setLayerZIndex(this.leftLayerId, 200);
+
+      this.mapService.disableSwipe(this.leftLayerId); // Ensure no swipe
+      this.map3dService.disableSwipe(this.leftLayerId);
+
+      this.mapService.setLayerOpacity(this.leftLayerId, this.overlayOpacity / 100);
+      this.mapService.setLayerOpacity(this.rightLayerId, 1);
+    }
+  }
+
+  resetComparison(): void {
+    // Disable swipe on everything
+    if (this.availableLayers) {
+      this.availableLayers.forEach(l => {
+        this.mapService.disableSwipe(l.id);
+        this.map3dService.disableSwipe(l.id);
+      });
     }
 
-    getLayerName(layerId: number | null): string {
-        if (!layerId) return '';
-        const layer = this.availableLayers.find(l => l.id === layerId);
-        return layer ? layer.name : '';
+    if (this.leftLayerId) {
+      this.mapService.setLayerOpacity(this.leftLayerId, 1);
     }
+    if (this.rightLayerId) {
+      this.mapService.setLayerOpacity(this.rightLayerId, 1);
+    }
+
+    this.leftLayerId = null;
+    this.rightLayerId = null;
+    this.swipePosition = 50;
+    this.overlayOpacity = 100; // Reset to opaque
+  }
+
+  debugToggle(): void {
+    this.isActive = !this.isActive;
+    console.log('Debug Toggle: isActive =', this.isActive);
+    if (!this.isActive) {
+      this.resetComparison();
+    }
+  }
 }

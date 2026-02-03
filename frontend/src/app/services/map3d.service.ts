@@ -113,7 +113,7 @@ export class Map3dService {
     /**
      * Agrega una capa raster (Tile) al globo 3D
      */
-    async addRasterLayer(name: string, url: string, bounds?: number[]) {
+    async addRasterLayer(name: string, url: string, bounds?: number[], id?: number) {
         if (!this.viewer) return;
 
         const provider = new Cesium.UrlTemplateImageryProvider({
@@ -123,6 +123,7 @@ export class Map3dService {
 
         const layer = this.viewer.imageryLayers.addImageryProvider(provider);
         (layer as any)._name = name; // Guardar nombre para identificar
+        (layer as any)._id = id;     // Guardar ID
 
         if (bounds) {
             this.viewer.camera.flyTo({
@@ -153,5 +154,48 @@ export class Map3dService {
 
     getViewer() {
         return this.viewer;
+    }
+
+    /**
+     * Activa el modo Swipe para una capa específica
+     */
+    enableSwipe(layerId: string | number) {
+        if (!this.viewer) return;
+        const layers = this.viewer.imageryLayers;
+        for (let i = 0; i < layers.length; i++) {
+            const layer = layers.get(i);
+            if ((layer as any)._id == layerId) {
+                layer.splitDirection = Cesium.SplitDirection.LEFT;
+            } else if (i > 0) { // Keep base layer (0) visible everywhere or strict?
+                // Usually we want the base layer (or comparison layer) to be visible on the RIGHT
+                // But specifically for "Swiping A over B", A is LEFT. B should be everywhere (NONE) or RIGHT.
+                // If B is NONE, A covers it on LEFT. On RIGHT, A is gone, B is visible. Correct.
+                // So strictly setting swipe layer to LEFT is enough.
+            }
+        }
+        this.viewer.scene.splitPosition = 0.5;
+    }
+
+    /**
+     * Desactiva el modo Swipe para una capa
+     */
+    disableSwipe(layerId: string | number) {
+        if (!this.viewer) return;
+        const layers = this.viewer.imageryLayers;
+        for (let i = 0; i < layers.length; i++) {
+            const layer = layers.get(i);
+            if ((layer as any)._id == layerId) {
+                layer.splitDirection = Cesium.SplitDirection.NONE;
+            }
+        }
+    }
+
+    /**
+     * Ajusta la posición del swipe
+     * @param percent Porcentaje (0-100)
+     */
+    setSwipePosition(percent: number) {
+        if (!this.viewer) return;
+        this.viewer.scene.splitPosition = percent / 100;
     }
 }

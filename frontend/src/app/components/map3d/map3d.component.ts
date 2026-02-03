@@ -49,7 +49,7 @@ export class Map3dComponent implements OnInit, AfterViewInit, OnDestroy {
 
       if (layer.layer_type === 'raster') {
         const tileUrl = `${this.apiService.getApiUrl()}/tiles/${filename}/{z}/{x}/{y}.png`;
-        this.map3dService.addRasterLayer(layer.name, tileUrl, metadata.bounds);
+        this.map3dService.addRasterLayer(layer.name, tileUrl, metadata.bounds, layer.id);
       } else if (layer.layer_type === '3d_model') {
         // Si es tileset, usar add3DTileset
         if (filename?.toLowerCase().endsWith('tileset.json')) {

@@ -11,6 +11,7 @@ import { UserManager } from './components/user-manager/user-manager';
 import { LoginComponent } from './components/login/login';
 import { DashboardComponent } from './components/dashboard/dashboard';
 import { AuthService } from './services/auth.service';
+import { LayerCompareComponent } from './components/layer-compare/layer-compare.component';
 import { finalize } from 'rxjs/operators';
 import { Output, EventEmitter } from '@angular/core';
 
@@ -28,7 +29,8 @@ import { Output, EventEmitter } from '@angular/core';
     Map3dComponent,
     UserManager,
     LoginComponent,
-    DashboardComponent
+    DashboardComponent,
+    LayerCompareComponent
   ],
   template: `
     <app-toast></app-toast>
@@ -59,6 +61,7 @@ import { Output, EventEmitter } from '@angular/core';
             </div>
             <app-layer-control></app-layer-control>
             <app-upload></app-upload>
+            <app-layer-compare></app-layer-compare>
         </ng-container>
 
         <ng-container *ngIf="currentView === 'projects'">
