@@ -134,6 +134,31 @@ export class Map3dService {
     }
 
     /**
+     * Agrega una capa KML/KMZ al visor 3D
+     */
+    async addKmlLayer(name: string, url: string, id?: number) {
+        if (!this.viewer) return;
+
+        try {
+            const dataSource = await Cesium.KmlDataSource.load(url, {
+                camera: this.viewer.camera,
+                canvas: this.viewer.canvas,
+                clampToGround: true // Importante para que se draftee sobre el terreno
+            });
+
+            await this.viewer.dataSources.add(dataSource);
+            (dataSource as any)._name = name;
+            (dataSource as any)._id = id;
+
+            this.viewer.zoomTo(dataSource);
+            return dataSource;
+        } catch (error) {
+            console.error(`Error cargando KML ${name}:`, error);
+            return null;
+        }
+    }
+
+    /**
      * Limpia capas y entidades no base del visor 3D
      */
     clearLayers() {
@@ -141,6 +166,9 @@ export class Map3dService {
 
         // Limpiar entidades (modelos 3D, etc)
         this.viewer.entities.removeAll();
+
+        // Limpiar fuentes de datos (KML, GeoJSON, etc)
+        this.viewer.dataSources.removeAll();
 
         // Limpiar primitivas (Tilesets 3D)
         this.viewer.scene.primitives.removeAll();

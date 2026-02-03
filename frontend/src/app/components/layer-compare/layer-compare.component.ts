@@ -10,14 +10,7 @@ import { Subscription } from 'rxjs';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <!-- Debug button to test if component renders -->
-    <button class="debug-btn" (click)="debugToggle()" 
-            style="position: fixed; top: 60px; right: 20px; z-index: 9999; 
-                   padding: 10px 15px; background: #00c1d2; color: white; 
-                   border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">
-      {{ isActive ? 'Cerrar Comparar' : 'Abrir Comparar' }}
-    </button>
-    
+    <!-- Compare Panel - triggered from layer control -->
     <div class="compare-container" *ngIf="isActive">
       <div class="compare-header">
         <h4>Comparar Capas</h4>
@@ -217,6 +210,7 @@ import { Subscription } from 'rxjs';
       top: 0;
       bottom: 0;
       width: 4px;
+      transform: translateX(-50%);
       background: linear-gradient(to bottom, #00c1d2 0%, rgba(0,193,210,0.5) 50%, #00c1d2 100%);
       z-index: 999;
       pointer-events: auto;
@@ -326,7 +320,8 @@ export class LayerCompareComponent implements OnInit, OnDestroy {
       clientX = event.touches[0].clientX;
     }
 
-    const width = window.innerWidth;
+    const mapSize = this.mapService.getMap()?.getSize();
+    const width = mapSize ? mapSize[0] : window.innerWidth;
     let percent = (clientX / width) * 100;
     percent = Math.max(0, Math.min(100, percent));
 

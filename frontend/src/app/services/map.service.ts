@@ -29,6 +29,7 @@ register(proj4);
 export class MapService {
     private map!: OlMap;
     private layers: any[] = [];
+    private loadingLayers = new Set<number | string>();
     public layersChanged = new BehaviorSubject<any[]>([]);
     public compareToolTrigger = new Subject<string | number | null>();
 
@@ -145,36 +146,127 @@ export class MapService {
         this.zoomToExtent(vectorSource.getExtent(), 'EPSG:3857');
     }
 
+    getLayerById(id: string | number) {
+        return this.layers.find(l => l.id === id);
+    }
+
     /**
      * Agrega una capa KML
      */
-    addKmlLayer(name: string, url: string, id?: number, folderId?: number | null) {
-        const vectorSource = new VectorSource({
-            url: url,
-            format: new KML({ extractStyles: true })
-        });
+    async addKmlLayer(name: string, url: string, id?: number, folderId?: number | null) {
+        // Evitar duplicados si ya existe o se está cargando
+        if (id && (this.getLayerById(id) || this.loadingLayers.has(id))) {
+            console.log(`[KML] Capa ${name} (ID: ${id}) ya existe o está cargándose, saltando...`);
+            return;
+        }
 
-        const vectorLayer = new VectorLayer({
-            source: vectorSource,
-            style: (feature) => this.getKMLStyle(feature),
-            properties: {
-                name: name,
-                id: id || name + Date.now(),
-                type: 'kml',
-                folder_id: folderId
+        if (id) this.loadingLayers.add(id);
+
+        try {
+            console.log(`[KML] Iniciando carga de: ${name} desde ${url}`);
+
+            // 1. Obtener el contenido del KML manualmente para poder manipularlo
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Error al descargar KML: ${response.statusText}`);
+            let kmlText = await response.text();
+
+            // 2. Resolver rutas relativas de iconos/texturas/estilos (común en KMZ extraídos)
+            const lastSlashIndex = url.lastIndexOf('/');
+            const baseUrl = url.substring(0, lastSlashIndex + 1);
+            console.log(`[KML] Base URL detectada: ${baseUrl}`);
+
+            // Regex mejorado: Busca <href>, <styleUrl>, <icon>, etc.
+            const urlTagsRegex = /<(href|styleUrl|Icon|icon)>(.*?)<\/\1>/gi;
+
+            kmlText = kmlText.replace(urlTagsRegex, (match, tag, path) => {
+                const cleanPath = path.trim();
+
+                // NO reescribir si:
+                // - Empieza con # (es un estilo interno/referencia local)
+                // - Empieza con http/https/data: (ya es absoluto)
+                if (cleanPath.startsWith('#') || /^(http|https|data:)/i.test(cleanPath)) {
+                    return match;
+                }
+
+                // Limpiar posibles slashes iniciales para evitar "//"
+                const normalizedPath = cleanPath.replace(/^\/+/, '');
+                const absoluteUrl = `${baseUrl}${normalizedPath}`;
+
+                console.log(`[KML] Reescrito: <${tag}>${cleanPath}</${tag}> -> <${tag}>${absoluteUrl}</${tag}>`);
+                return `<${tag}>${absoluteUrl}</${tag}>`;
+            });
+
+            // 3. Parsear los features con el contenido modificado
+            const kmlFormat = new KML({
+                extractStyles: true,
+                showPointNames: true
+            });
+
+            const features = kmlFormat.readFeatures(kmlText, {
+                dataProjection: 'EPSG:4326',
+                featureProjection: 'EPSG:3857'
+            });
+
+            if (!features || features.length === 0) {
+                console.warn(`[KML] No se encontraron elementos válidos en el archivo KML: ${name}`);
             }
-        });
 
-        this.addLayer(vectorLayer, 'kml');
+            const vectorSource = new VectorSource({
+                features: features
+            });
 
-        vectorSource.on('change', () => {
-            if (vectorSource.getState() === 'ready') {
+            const vectorLayer = new VectorLayer({
+                source: vectorSource,
+                style: (feature: any) => {
+                    const style = feature.getStyle();
+                    if (style) return style;
+                    return this.getKMLStyle(feature);
+                },
+                properties: {
+                    name: name,
+                    id: id || name + Date.now(),
+                    type: 'kml',
+                    folder_id: folderId
+                }
+            });
+
+            this.addLayer(vectorLayer, 'kml');
+            vectorLayer.setZIndex(100);
+
+            // 4. Enfocar y Debug de coordenadas
+            if (features.length > 0) {
                 const extent = vectorSource.getExtent();
-                if (extent && extent[0] !== Infinity) {
+                console.log(`[KML] Extent de la capa '${name}':`, extent);
+
+                if (extent && extent[0] !== Infinity && !isNaN(extent[0])) {
                     this.zoomToExtent(extent, 'EPSG:3857');
                 }
+
+                // Debug del primer elemento
+                const firstGeom = features[0].getGeometry();
+                if (firstGeom) {
+                    console.log(`[KML] Coordenadas de ejemplo (Feature 0):`, (firstGeom as any).getCoordinates?.() || 'No coords');
+                }
             }
-        });
+
+            console.log(`[OK] KML '${name}' cargado con ${features.length} elementos.`);
+
+        } catch (error) {
+            console.error(`[ERROR] en addKmlLayer para ${name}:`, error);
+            const vectorSource = new VectorSource({
+                url: url,
+                format: new KML({ extractStyles: true })
+            });
+            const vectorLayer = new VectorLayer({
+                source: vectorSource,
+                style: (feature: any) => this.getKMLStyle(feature),
+                properties: { name, id: id || name + Date.now(), type: 'kml', folder_id: folderId }
+            });
+            vectorLayer.setZIndex(100);
+            this.addLayer(vectorLayer, 'kml');
+        } finally {
+            if (id) this.loadingLayers.delete(id);
+        }
     }
 
     /**
@@ -194,21 +286,30 @@ export class MapService {
 
     private getKMLStyle(feature: any) {
         const name = feature.get('name') || '';
+
         return new Style({
-            stroke: new Stroke({ color: '#00fbff', width: 2 }),
-            fill: new Fill({ color: 'rgba(0, 251, 255, 0.2)' }),
+            // Relleno: Verde Lima con buena opacidad
+            fill: new Fill({ color: 'rgba(50, 205, 50, 0.6)' }),
+
+            // Líneas: Gris oscuro para máximo contraste sobre el mapa
+            stroke: new Stroke({ color: '#333333', width: 2.5 }),
+
+            // Puntos: Círculo Cyan con borde negro
             image: new CircleStyle({
-                radius: 5,
-                fill: new Fill({ color: '#00fbff' }),
-                stroke: new Stroke({ color: '#fff', width: 1 })
+                radius: 6,
+                fill: new Fill({ color: '#00ffff' }),
+                stroke: new Stroke({ color: '#000000', width: 2 })
             }),
+
+            // Texto: Legible con borde negro
             text: new Text({
                 text: name,
-                font: 'bold 14px "Outfit", sans-serif',
-                fill: new Fill({ color: '#fff' }),
-                stroke: new Stroke({ color: '#000', width: 3 }),
+                font: 'bold 12px "Outfit", sans-serif',
+                fill: new Fill({ color: '#ffffff' }),
+                stroke: new Stroke({ color: '#000000', width: 3 }),
                 offsetY: -15,
-                textAlign: 'center'
+                textAlign: 'center',
+                overflow: true
             })
         });
     }
@@ -290,12 +391,17 @@ export class MapService {
         const prerender = (event: any) => {
             const ctx = event.context;
             const mapSize = this.map.getSize();
-            if (!mapSize) return;
-            const width = mapSize[0] * (this.swipePosition / 100);
+            if (!mapSize || !ctx) return;
+
+            // Importante: El contexto del canvas puede estar escalado (Retina/High-DPI)
+            const pixelRatio = event.frameState?.pixelRatio || window.devicePixelRatio || 1;
+
+            const width = mapSize[0] * (this.swipePosition / 100) * pixelRatio;
+            const height = mapSize[1] * pixelRatio;
 
             ctx.save();
             ctx.beginPath();
-            ctx.rect(0, 0, width, mapSize[1]);
+            ctx.rect(0, 0, width, height);
             ctx.clip();
         };
 

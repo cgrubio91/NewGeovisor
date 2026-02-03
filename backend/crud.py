@@ -202,7 +202,8 @@ def get_dashboard_stats(db: Session, user_id: int = None, is_admin: bool = False
         
     db_size = "N/A"
     try:
-        size_query = db.execute(text("SELECT pg_size_pretty(pg_database_size('geovisor_db'))"))
+        from database import settings
+        size_query = db.execute(text(f"SELECT pg_size_pretty(pg_database_size('{settings.POSTGRES_DB}'))"))
         db_size = size_query.scalar() or "N/A"
     except:
         pass

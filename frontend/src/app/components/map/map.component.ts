@@ -86,8 +86,24 @@ export class MapComponent implements OnInit, AfterViewInit {
       } else if (layer.layer_type === 'vector') {
         this.mapService.addVectorLayer(layer.name, metadata, layer.id, layer.folder_id);
       } else if (layer.layer_type === 'kml') {
-        const filename = layer.file_path.split(/[\\/]/).pop();
-        const kmlUrl = `${this.apiService.getApiUrl()}/files/${filename}`;
+        let kmlUrl = '';
+        const filePath = layer.file_path || '';
+
+        // Intentar extraer ruta relativa desde 'uploads' para soportar subcarpetas
+        const normalizedPath = filePath.replace(/\\/g, '/');
+        const uploadsMarker = 'uploads/';
+        const uploadsIndex = normalizedPath.indexOf(uploadsMarker);
+
+        if (uploadsIndex !== -1) {
+          // Extraer todo lo que está después de 'uploads/'
+          const relativePath = normalizedPath.substring(uploadsIndex + uploadsMarker.length);
+          kmlUrl = `${this.apiService.getApiUrl()}/files/${relativePath}`;
+        } else {
+          // Si no hay 'uploads/', probar si es una ruta ya relativa
+          const filename = filePath.split(/[\\/]/).pop();
+          kmlUrl = `${this.apiService.getApiUrl()}/files/${filename}`;
+        }
+
         this.mapService.addKmlLayer(layer.name, kmlUrl, layer.id, layer.folder_id);
       }
     });

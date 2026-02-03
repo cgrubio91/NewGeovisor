@@ -270,47 +270,62 @@ async def upload_files(
         # Si es KMZ, descomprimir para obtener el KML y usar ese archivo en su lugar
         if filename.lower().endswith('.kmz'):
             import zipfile
-            old_file_path = file_path # Guardar la ruta original del KMZ
+            old_file_path = file_path
+            extraction_success = False
             try:
+                print(f"DEBUG: Attempting to unzip KMZ with FULL EXTRACTION: {old_file_path}")
+                
+                import time
+                import uuid
+                safe_dirname = f"kmz_{int(time.time())}_{str(uuid.uuid4())[:8]}"
+                extract_dir = os.path.join(UPLOAD_DIR, safe_dirname)
+                os.makedirs(extract_dir, exist_ok=True)
+                
+                print(f"DEBUG: Extraction directory: {extract_dir}")
+                
                 with zipfile.ZipFile(old_file_path, 'r') as zip_ref:
-                    # Buscar el primer archivo .kml dentro del zip
+                    zip_ref.extractall(extract_dir)
                     kml_files = [f for f in zip_ref.namelist() if f.lower().endswith('.kml')]
-                    if kml_files:
-                        # Priorizar 'doc.kml' o el primero encontrado
-                        kml_file_in_zip = 'doc.kml' if 'doc.kml' in kml_files else kml_files[0]
-                        
-                        kml_filename_base = os.path.splitext(os.path.basename(kml_file_in_zip))[0]
-                        kml_filename = f"{kml_filename_base}.kml"
-                        kml_path = os.path.join(UPLOAD_DIR, kml_filename)
-                        
-                        # Evitar sobrescribir si el kml ya existe con ese nombre
-                        c = 1
-                        n_tmp, e_tmp = os.path.splitext(kml_filename)
-                        while os.path.exists(kml_path):
-                            kml_filename = f"{n_tmp}_{c}{e_tmp}"
-                            kml_path = os.path.join(UPLOAD_DIR, kml_filename)
-                            c += 1
-                        
-                        with open(kml_path, "wb") as f_out:
-                            f_out.write(zip_ref.read(kml_file_in_zip))
-                        
-                        # Actualizar para usar el KML extraído en la base de datos
-                        filename = kml_filename
-                        file_path = kml_path
-                        name = os.path.splitext(kml_filename)[0] # Actualizar 'name' para el KML
-                        # Borrar el KMZ original para ahorrar espacio y evitar confusiones
-                        os.remove(old_file_path) 
-                    else:
-                        print(f"KMZ file {filename} does not contain a KML file.")
-                        # Si no hay KML, el KMZ no se procesa como capa KML
-                        # Podríamos eliminar el KMZ o dejarlo si se quiere guardar el original
-                        os.remove(old_file_path)
-                        continue # Saltar al siguiente archivo si no se encontró KML
+                
+                # Bloque with cerrado, archivo liberado
+                
+                if kml_files:
+                    kml_file_in_zip = next((f for f in kml_files if f.lower() == 'doc.kml'), kml_files[0])
+                    kml_path = os.path.join(extract_dir, kml_file_in_zip)
+                    kml_path = os.path.normpath(kml_path)
+                    
+                    file_path = kml_path
+                    filename = kml_file_in_zip
+                    extraction_success = True
+                    print(f"DEBUG: Extraction SUCCESS. Target: {kml_path}")
+                else:
+                    print(f"DEBUG: No KML found inside KMZ.")
+                    try:
+                        shutil.rmtree(extract_dir)
+                    except:
+                        pass
+                    raise Exception("No KML file found")
+
             except Exception as e:
-                print(f"Error unzipping KMZ {filename}: {e}")
-                # Si falla la descompresión, eliminar el KMZ y continuar
-                os.remove(old_file_path)
-                continue # Saltar al siguiente archivo
+                print(f"ERROR: General KMZ processing error: {e}")
+                import traceback
+                traceback.print_exc()
+                # Si falló la extracción, no podemos continuar con este archivo
+                if os.path.exists(old_file_path):
+                    try: os.remove(old_file_path)
+                    except: pass
+                continue
+
+            # Cleanup NO CRÍTICO fuera del bloque principal de error
+            if extraction_success:
+                try:
+                    import time
+                    time.sleep(0.5) # Wait for handles to release
+                    if os.path.exists(old_file_path):
+                        os.remove(old_file_path)
+                        print("DEBUG: Original KMZ removed.")
+                except Exception as e:
+                    print(f"WARNING: Could not remove original KMZ (non-fatal): {e}")
         
         # Procesar archivo con el nuevo file_processor
         try:
@@ -531,7 +546,7 @@ async def get_tile(filename: str, z: int, x: int, y: int):
         img.save(buf, format="PNG")
         return Response(content=buf.getvalue(), media_type="image/png")
 
-@app.get("/files/{filename}")
+@app.get("/files/{filename:path}")
 async def get_file(filename: str):
     file_path = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(file_path):

@@ -170,7 +170,21 @@ class FileProcessor:
             return info
             
         except Exception as e:
-            return {'error': str(e)}
+            print(f"ERROR: process_kml failed with fastkml: {e}")
+            try:
+                # Fallback: Basic parsing attempt
+                if 'kml_content' in locals():
+                    content_str = str(kml_content)
+                    return {
+                        'feature_count': content_str.count('<Placemark>'),
+                        'has_placemarks': '<Placemark>' in content_str,
+                        'format': 'kml',
+                        'note': f'Metadata extracted via basic fallback due to: {str(e)}'
+                    }
+                else:
+                    return {'error': str(e)} 
+            except Exception as e2:
+                return {'error': f"Processing failed: {str(e)}. Fallback failed: {str(e2)}"}
     
     @staticmethod
     def process_point_cloud(file_path: str) -> Dict[str, Any]:

@@ -79,6 +79,18 @@ import { Layer, Folder } from '../../models/models';
               <p>No hay elementos cargados</p>
             </div>
           </div>
+
+          <!-- Compare Layers Button - Below all layers -->
+          <div class="compare-section" *ngIf="layers.length >= 2">
+            <button class="compare-btn" (click)="openGlobalCompareTool()" title="Comparar capas mediante cortinilla u opacidad">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="8" height="18" rx="1"></rect>
+                <rect x="13" y="3" width="8" height="18" rx="1"></rect>
+                <line x1="12" y1="3" x2="12" y2="21"></line>
+              </svg>
+              <span>Comparar Capas</span>
+            </button>
+          </div>
       </div>
       
       <!-- Reusable Layer Template -->
@@ -277,6 +289,41 @@ import { Layer, Folder } from '../../models/models';
 
     .empty-folder { font-size: 0.7rem; padding: 5px; color: #64748b; font-style: italic; }
     .empty-state { text-align: center; padding: 30px; color: #64748b; font-size: 0.85rem; }
+
+    /* Compare Section */
+    .compare-section {
+      padding: 12px;
+      border-top: 1px solid rgba(0, 193, 210, 0.2);
+      margin-top: 8px;
+    }
+
+    .compare-btn {
+      width: 100%;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, rgba(0, 193, 210, 0.15), rgba(0, 193, 210, 0.05));
+      border: 1px solid rgba(0, 193, 210, 0.4);
+      border-radius: 8px;
+      color: #00c1d2;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.3s ease;
+    }
+
+    .compare-btn:hover {
+      background: linear-gradient(135deg, rgba(0, 193, 210, 0.3), rgba(0, 193, 210, 0.15));
+      border-color: #00c1d2;
+      box-shadow: 0 0 15px rgba(0, 193, 210, 0.3);
+      transform: translateY(-2px);
+    }
+
+    .compare-btn svg {
+      flex-shrink: 0;
+    }
   `]
 })
 export class LayerControlComponent implements OnInit {
@@ -443,4 +490,18 @@ export class LayerControlComponent implements OnInit {
 
   trackLayer(index: number, item: any) { return item.id; }
   trackFolder(index: number, item: Folder) { return item.id; }
+
+  openGlobalCompareTool() {
+    // Get first two visible layers or first two layers
+    const visibleLayers = this.layers.filter(l => l.visible && l.type !== 'base');
+    const layersToCompare = visibleLayers.length >= 2 ? visibleLayers : this.layers.filter(l => l.type !== 'base');
+
+    if (layersToCompare.length >= 2) {
+      // Open compare tool with the first layer
+      this.mapService.openCompareTool(layersToCompare[0].id);
+      this.toastService.show('Herramienta de comparación activada', 'info');
+    } else {
+      this.toastService.show('Necesitas al menos 2 capas para comparar', 'warning');
+    }
+  }
 }

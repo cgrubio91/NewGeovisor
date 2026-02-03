@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     ALLOWED_ORIGINS: str = "*"
+    POSTGRES_DB: str = "geovisor_db"
     ENV: str = "development"
 
     class Config:

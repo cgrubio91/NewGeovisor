@@ -18,17 +18,20 @@ import { finalize } from 'rxjs/operators';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="upload-panel card">
-      <div class="panel-header">
+    <div class="upload-panel card" [class.collapsed]="isCollapsed">
+      <div class="panel-header" (click)="toggleCollapse()">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
           <polyline points="17 8 12 3 7 8"></polyline>
           <line x1="12" y1="3" x2="12" y2="15"></line>
         </svg>
-        <h3>Carga de Archivos</h3>
+        <h3 *ngIf="!isCollapsed">Carga de Archivos</h3>
+        <button class="toggle-btn" (click)="toggleCollapse(); $event.stopPropagation()">
+          <i class="fas" [class.fa-chevron-down]="isCollapsed" [class.fa-chevron-up]="!isCollapsed"></i>
+        </button>
       </div>
       
-      <div class="upload-content">
+      <div class="upload-content" *ngIf="!isCollapsed">
         <!-- Folder Selection -->
         <div class="folder-selector" *ngIf="folders.length > 0">
           <label>Cargar en carpeta:</label>
@@ -116,6 +119,17 @@ import { finalize } from 'rxjs/operators';
       flex-direction: column;
       overflow: hidden;
       animation: slideInLeft 0.3s ease-out;
+      transition: width 0.3s ease, height 0.3s ease;
+    }
+
+    .upload-panel.collapsed {
+      width: 60px;
+      height: auto;
+    }
+
+    .upload-panel.collapsed .panel-header {
+      padding: 12px;
+      justify-content: center;
     }
 
     .panel-header {
@@ -125,16 +139,36 @@ import { finalize } from 'rxjs/operators';
       display: flex;
       align-items: center;
       gap: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .panel-header:hover {
+      background: linear-gradient(135deg, var(--bg-secondary), var(--bg-tertiary));
     }
 
     .panel-header h3 {
       font-size: 1.1rem;
       margin: 0;
       color: var(--color-primary-cyan);
+      flex: 1;
     }
 
     .panel-header svg {
       color: var(--color-primary-cyan);
+    }
+
+    .toggle-btn {
+      background: none;
+      border: none;
+      color: var(--color-primary-cyan);
+      cursor: pointer;
+      padding: 4px;
+      transition: transform 0.2s;
+    }
+
+    .toggle-btn:hover {
+      transform: scale(1.2);
     }
 
     .upload-content {
@@ -264,6 +298,11 @@ import { finalize } from 'rxjs/operators';
 export class UploadComponent {
   selectedFiles: File[] = [];
   uploading = false;
+  isCollapsed = false;
+
+  toggleCollapse() {
+    this.isCollapsed = !this.isCollapsed;
+  }
   folders: any[] = [];
   selectedFolderId: number = 0;
 
