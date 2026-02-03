@@ -213,10 +213,22 @@ export class MapService {
             type: l.get('type') || 'raster',
             visible: l.getVisible(),
             opacity: l.getOpacity(),
+            z_index: l.getZIndex() || 0,
             folder_id: l.get('folder_id'),
             instance: l
         }));
         this.layersChanged.next(this.layers);
+    }
+
+    /**
+     * Establece el orden de apilamiento de una capa
+     */
+    setLayerZIndex(layerId: string | number, zIndex: number) {
+        const layer = this.layers.find(l => l.id === layerId);
+        if (layer) {
+            layer.instance.setZIndex(zIndex);
+            this.updateLayerList();
+        }
     }
 
     /**

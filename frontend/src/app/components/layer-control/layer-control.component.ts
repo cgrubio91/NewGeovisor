@@ -87,23 +87,32 @@ import { Layer, Folder } from '../../models/models';
             </label>
             
             <div class="layer-actions">
+              <!-- Reordering Buttons -->
+              <button class="action-btn mini" (click)="reorderLayer(layer, 1)" title="Subir">
+                <i class="fas fa-chevron-up"></i>
+              </button>
+              <button class="action-btn mini" (click)="reorderLayer(layer, -1)" title="Bajar">
+                <i class="fas fa-chevron-down"></i>
+              </button>
+
               <div class="dropdown" (click)="$event.stopPropagation()">
-                <button class="action-btn dropbtn" title="Mover a...">
+                <button class="action-btn dropbtn" title="Acciones">
                    <i class="fas fa-ellipsis-v"></i>
                 </button>
                 <div class="dropdown-content">
-                  <a (click)="moveLayer(layer, undefined)">Raíz</a>
-                  <a *ngFor="let f of folders" (click)="moveLayer(layer, f.id)">{{f.name}}</a>
+                  <a (click)="moveLayer(layer, undefined)">Mover a Raíz</a>
+                  <a *ngFor="let f of folders" (click)="moveLayer(layer, f.id)">Mover a {{f.name}}</a>
                   <hr>
-                  <a class="text-danger" (click)="deleteLayer(layer)">Eliminar</a>
+                  <a class="text-danger" (click)="deleteLayer(layer)">Eliminar Capa</a>
                 </div>
               </div>
+              
               <button class="action-btn" (click)="zoomToLayer(layer)" title="Zoom">
                 <i class="fas fa-search-plus"></i>
               </button>
               <button *ngIf="layer.layer_type === 'raster'" class="action-btn" 
                       [class.active-swipe]="swipeActive && currentSwipeLayerId === layer.id"
-                      (click)="enableSwipe(layer.id)" title="Swipe">
+                      (click)="enableSwipe(layer.id)" title="Comparar (Swipe)">
                 <i class="fas fa-columns"></i>
               </button>
             </div>
@@ -122,10 +131,18 @@ import { Layer, Folder } from '../../models/models';
       @if (swipeActive) {
         <div class="swipe-overlay slide-in-bottom">
            <div class="swipe-header">
-             <span><i class="fas fa-columns"></i> Swipe Activo</span>
-             <button title="Cerrar" (click)="disableSwipe()"><i class="fas fa-times"></i></button>
+             <span><i class="fas fa-columns"></i> Herramienta de Comparación</span>
+             <button title="Cerrar Herramienta" (click)="disableSwipe()"><i class="fas fa-times"></i></button>
            </div>
+           <p class="swipe-hint">Desliza para comparar con la capa inferior</p>
            <input type="range" class="swipe-range" min="0" max="100" value="50" (input)="onSwipe($event)">
+        </div>
+
+        <!-- Línea divisoria visual sobre el mapa -->
+        <div class="swipe-visual-line" id="swipe-line" style="left: 50%;">
+           <div class="swipe-handle">
+             <i class="fas fa-arrows-alt-h"></i>
+           </div>
         </div>
       }
     </div>
@@ -207,9 +224,38 @@ import { Layer, Folder } from '../../models/models';
     .empty-folder { font-size: 0.7rem; padding: 5px; color: #64748b; font-style: italic; }
     .empty-state { text-align: center; padding: 30px; color: #64748b; font-size: 0.85rem; }
 
-    .swipe-overlay { padding: 12px; background: rgba(251, 146, 60, 0.1); border-top: 1px solid rgba(251, 146, 60, 0.3); }
-    .swipe-header { display: flex; justify-content: space-between; font-size: 0.75rem; color: #fb923c; margin-bottom: 8px; }
-    .swipe-range { width: 100%; accent-color: #fb923c; }
+    .swipe-overlay { padding: 12px; background: rgba(0, 193, 210, 0.1); border-top: 2px solid var(--color-primary-cyan); }
+    .swipe-header { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--color-primary-cyan); margin-bottom: 4px; font-weight: 600; }
+    .swipe-hint { font-size: 0.65rem; color: #94a3b8; margin: 0 0 8px 0; }
+    .swipe-range { width: 100%; accent-color: var(--color-primary-cyan); cursor: pointer; }
+
+    /* Estilos para la línea visual de Swipe */
+    .swipe-visual-line {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--color-primary-cyan);
+      z-index: 999;
+      pointer-events: none;
+      box-shadow: 0 0 10px rgba(0, 193, 210, 0.5);
+    }
+    .swipe-handle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 40px;
+      background: var(--color-primary-cyan);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+      border: 2px solid white;
+    }
   `]
 })
 export class LayerControlComponent implements OnInit {
@@ -221,7 +267,7 @@ export class LayerControlComponent implements OnInit {
   searchTerm = '';
   showNewFolderInput = false;
   swipeActive = false;
-  currentSwipeLayerId: string | null = null;
+  currentSwipeLayerId: string | number | null | undefined = null;
 
   private mapService = inject(MapService);
   private projectContext = inject(ProjectContextService);
@@ -351,7 +397,7 @@ export class LayerControlComponent implements OnInit {
     this.mapService.zoomToAllLayers();
   }
 
-  enableSwipe(id: string) {
+  enableSwipe(id: any) {
     if (this.swipeActive && this.currentSwipeLayerId === id) {
       this.disableSwipe();
       return;
@@ -359,16 +405,46 @@ export class LayerControlComponent implements OnInit {
     this.swipeActive = true;
     this.currentSwipeLayerId = id;
     this.mapService.enableSwipe(id);
+    this.toastService.show('Comparación activada. Deslice el control inferior.', 'info');
+
+    // Forzar render inicial de la línea visual
+    setTimeout(() => {
+      const line = document.getElementById('swipe-line');
+      if (line) line.style.left = '50%';
+    }, 100);
   }
 
   disableSwipe() {
     this.swipeActive = false;
-    this.currentSwipeLayerId = null;
-    this.mapService.getMap().render();
+    this.currentSwipeLayerId = undefined;
+    if (this.mapService.getMap()) {
+      this.mapService.getMap().render();
+    }
   }
 
   onSwipe(event: any) {
-    this.mapService.setSwipePosition(parseInt(event.target.value));
+    const pos = parseInt(event.target.value);
+    this.mapService.setSwipePosition(pos);
+    const line = document.getElementById('swipe-line');
+    if (line) line.style.left = `${pos}%`;
+  }
+
+  reorderLayer(layer: any, delta: number) {
+    const currentZ = layer.z_index || 0;
+    const newZ = Math.max(0, currentZ + delta);
+
+    this.mapService.setLayerZIndex(layer.id, newZ);
+
+    // Sincronizar localmente
+    layer.z_index = newZ;
+
+    if (typeof layer.id === 'number') {
+      this.projectService.updateLayer(layer.id, { z_index: newZ }).subscribe({
+        next: () => {
+          this.toastService.show(`Orden actualizado: Nivel ${newZ}`, 'info');
+        }
+      });
+    }
   }
 
   trackLayer(index: number, item: any) { return item.id; }

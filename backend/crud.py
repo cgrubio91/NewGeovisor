@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from models import User, Project, Layer, Folder
 from schemas import UserCreate, ProjectCreate, LayerCreate, FolderCreate
 from passlib.context import CryptContext
@@ -181,29 +181,29 @@ def delete_layer(db: Session, layer_id: int):
         db.commit()
     return db_layer
 
-def get_dashboard_stats(db: Session):
-    """
-    Obtiene estadísticas globales para el dashboard digno.
-    """
-    user_count = db.query(func.count(User.id)).scalar()
-    project_count = db.query(func.count(Project.id)).scalar()
-    layer_count = db.query(func.count(Layer.id)).scalar()
+def get_dashboard_stats(db: Session, user_id: int = None, is_admin: bool = False):
+    query_projects = db.query(Project)
+    query_layers = db.query(Layer)
     
-    # Proyectos más visitados
-    top_projects = db.query(Project.name, Project.visit_count)\
-        .order_by(Project.visit_count.desc())\
-        .limit(5).all()
+    if user_id and not is_admin:
+        query_projects = query_projects.filter(Project.owner_id == user_id)
+        query_layers = query_layers.join(Project).filter(Project.owner_id == user_id)
     
-    # Usuarios más activos
-    top_users = db.query(User.username, User.login_count)\
-        .order_by(User.login_count.desc())\
-        .limit(5).all()
+    user_count = db.query(User).count() if is_admin else 1
+    project_count = query_projects.count()
+    layer_count = query_layers.count()
+    
+    top_projects = query_projects.order_by(Project.visit_count.desc()).limit(5).all()
+    
+    top_users = []
+    if is_admin:
+        top_users_raw = db.query(User.username, User.login_count).order_by(User.login_count.desc()).limit(5).all()
+        top_users = [{"name": u[0], "logins": u[1]} for u in top_users_raw]
         
-    # Tamaño de la base de datos (PostgreSQL específico)
     db_size = "N/A"
     try:
-        size_query = db.execute(func.pg_size_pretty(func.pg_database_size('geovisor_db')))
-        db_size = size_query.scalar()
+        size_query = db.execute(text("SELECT pg_size_pretty(pg_database_size('geovisor_db'))"))
+        db_size = size_query.scalar() or "N/A"
     except:
         pass
 
@@ -212,6 +212,6 @@ def get_dashboard_stats(db: Session):
         "projects": project_count,
         "layers": layer_count,
         "db_size": db_size,
-        "top_projects": [{"name": p[0], "visits": p[1]} for p in top_projects],
-        "top_users": [{"name": u[0], "logins": u[1]} for u in top_users]
+        "top_projects": [{"name": p.name, "visits": p.visit_count or 0} for p in top_projects],
+        "top_users": top_users
     }

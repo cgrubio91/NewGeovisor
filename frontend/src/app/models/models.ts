@@ -44,5 +44,6 @@ export interface Layer {
     metadata?: any;
     visible?: boolean; // Frontend state
     opacity?: number; // Frontend state
+    z_index?: number; // Frontend and Backend state
 }
 

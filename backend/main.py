@@ -208,8 +208,8 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
 
 @app.get("/dashboard/stats")
 def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """Obtener estadísticas dignas para el dashboard"""
-    return crud.get_dashboard_stats(db)
+    """Obtener estadísticas reales para el dashboard"""
+    return crud.get_dashboard_stats(db, user_id=current_user.id, is_admin=current_user.is_superuser)
 
 # --- FOLDER ENDPOINTS ---
 @app.post("/folders/", response_model=schemas.FolderRead)
