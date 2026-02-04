@@ -80,8 +80,9 @@ export class Map3dService {
     /**
      * Agrega un Tileset 3D (Malla de realidad o Nube de puntos)
      * @param url URL del archivo tileset.json
+     * @param id ID de la capa
      */
-    async add3DTileset(url: string) {
+    async add3DTileset(url: string, id?: number) {
         if (!this.viewer) return;
 
         try {
@@ -91,6 +92,8 @@ export class Map3dService {
             });
 
             this.viewer.scene.primitives.add(tileset);
+            (tileset as any)._id = id; // Guardar ID
+            (tileset as any)._type = 'tileset';
 
             // Si es una nube de puntos, aplicar estilo para mejorar visibilidad
             tileset.pointCloudShading.attenuation = true;
@@ -159,6 +162,55 @@ export class Map3dService {
     }
 
     /**
+     * Establece la visibilidad de una capa en 3D
+     */
+    setLayerVisibility(layerId: string | number, visible: boolean) {
+        if (!this.viewer) return;
+
+        // 1. Buscar en imageryLayers (raster)
+        const layers = this.viewer.imageryLayers;
+        for (let i = 0; i < layers.length; i++) {
+            const layer = layers.get(i);
+            if ((layer as any)._id == layerId) {
+                layer.show = visible;
+            }
+        }
+
+        // 2. Buscar en primitives (3D Tilesets)
+        const primitives = this.viewer.scene.primitives;
+        for (let i = 0; i < primitives.length; i++) {
+            const primitive = primitives.get(i);
+            if ((primitive as any)._id == layerId) {
+                primitive.show = visible;
+            }
+        }
+
+        // 3. Buscar en dataSources (KML/GeoJSON)
+        this.viewer.dataSources.getByName(String(layerId)).forEach(ds => ds.show = visible);
+        // También por _id si lo guardamos
+        for (let i = 0; i < this.viewer.dataSources.length; i++) {
+            const ds = this.viewer.dataSources.get(i);
+            if ((ds as any)._id == layerId) {
+                ds.show = visible;
+            }
+        }
+    }
+
+    /**
+     * Establece la opacidad de una capa en 3D
+     */
+    setLayerOpacity(layerId: string | number, opacity: number) {
+        if (!this.viewer) return;
+        const layers = this.viewer.imageryLayers;
+        for (let i = 0; i < layers.length; i++) {
+            const layer = layers.get(i);
+            if ((layer as any)._id == layerId) {
+                layer.alpha = opacity;
+            }
+        }
+    }
+
+    /**
      * Limpia capas y entidades no base del visor 3D
      */
     clearLayers() {
@@ -187,21 +239,29 @@ export class Map3dService {
     /**
      * Activa el modo Swipe para una capa específica
      */
-    enableSwipe(layerId: string | number) {
+    enableSwipe(layerId: string | number, side: 'left' | 'right' = 'left') {
         if (!this.viewer) return;
+
+        const splitDir = side === 'left' ? Cesium.SplitDirection.LEFT : Cesium.SplitDirection.RIGHT;
+
+        // 1. Imagery Layers
         const layers = this.viewer.imageryLayers;
         for (let i = 0; i < layers.length; i++) {
             const layer = layers.get(i);
             if ((layer as any)._id == layerId) {
-                layer.splitDirection = Cesium.SplitDirection.LEFT;
-            } else if (i > 0) { // Keep base layer (0) visible everywhere or strict?
-                // Usually we want the base layer (or comparison layer) to be visible on the RIGHT
-                // But specifically for "Swiping A over B", A is LEFT. B should be everywhere (NONE) or RIGHT.
-                // If B is NONE, A covers it on LEFT. On RIGHT, A is gone, B is visible. Correct.
-                // So strictly setting swipe layer to LEFT is enough.
+                layer.splitDirection = splitDir;
             }
         }
-        this.viewer.scene.splitPosition = 0.5;
+
+        // 2. 3D Tilesets (Necesitan clipping planes para un swipe real, o splitDirection si es soportado)
+        // Nota: Cesium 1.107+ soporta splitDirection en Tilesets pero requiere backFaceCulling: false
+        const primitives = this.viewer.scene.primitives;
+        for (let i = 0; i < primitives.length; i++) {
+            const primitive = primitives.get(i);
+            if ((primitive as any)._id == layerId && primitive instanceof Cesium.Cesium3DTileset) {
+                (primitive as any).splitDirection = splitDir;
+            }
+        }
     }
 
     /**
@@ -209,11 +269,58 @@ export class Map3dService {
      */
     disableSwipe(layerId: string | number) {
         if (!this.viewer) return;
+
+        // 1. Imagery Layers
         const layers = this.viewer.imageryLayers;
         for (let i = 0; i < layers.length; i++) {
             const layer = layers.get(i);
             if ((layer as any)._id == layerId) {
                 layer.splitDirection = Cesium.SplitDirection.NONE;
+            }
+        }
+
+        // 2. 3D Tilesets
+        const primitives = this.viewer.scene.primitives;
+        for (let i = 0; i < primitives.length; i++) {
+            const primitive = primitives.get(i);
+            if ((primitive as any)._id == layerId && (primitive as any).splitDirection) {
+                (primitive as any).splitDirection = Cesium.SplitDirection.NONE;
+            }
+        }
+    }
+
+    /**
+     * Trae una capa al frente en 3D (útil para comparación/opacidad)
+     */
+    bringToFront(layerId: string | number) {
+        if (!this.viewer) return;
+        const layers = this.viewer.imageryLayers;
+        for (let i = 0; i < layers.length; i++) {
+            const layer = layers.get(i);
+            if ((layer as any)._id == layerId) {
+                layers.raiseToTop(layer);
+                break;
+            }
+        }
+    }
+
+    /**
+     * Desactiva swipe en todas las capas 3D
+     */
+    disableAllSwipe() {
+        if (!this.viewer) return;
+
+        // Desactivar en Imagery Layers
+        const layers = this.viewer.imageryLayers;
+        for (let i = 0; i < layers.length; i++) {
+            layers.get(i).splitDirection = Cesium.SplitDirection.NONE;
+        }
+
+        // Desactivar en Primitives
+        const primitives = this.viewer.scene.primitives;
+        for (let i = 0; i < primitives.length; i++) {
+            if ((primitives.get(i) as any).splitDirection !== undefined) {
+                (primitives.get(i) as any).splitDirection = Cesium.SplitDirection.NONE;
             }
         }
     }

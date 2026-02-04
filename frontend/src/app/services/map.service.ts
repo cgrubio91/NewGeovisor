@@ -147,7 +147,7 @@ export class MapService {
     }
 
     getLayerById(id: string | number) {
-        return this.layers.find(l => l.id === id);
+        return this.layers.find(l => l.id == id);
     }
 
     /**
@@ -335,7 +335,7 @@ export class MapService {
      * Establece el orden de apilamiento de una capa
      */
     setLayerZIndex(layerId: string | number, zIndex: number) {
-        const layer = this.layers.find(l => l.id === layerId);
+        const layer = this.layers.find(l => l.id == layerId);
         if (layer) {
             layer.instance.setZIndex(zIndex);
             this.updateLayerList();
@@ -348,9 +348,20 @@ export class MapService {
      * @param opacity Valor de opacidad (0-1)
      */
     setLayerOpacity(layerId: string | number, opacity: number) {
-        const layer = this.layers.find(l => l.id === layerId);
+        const layer = this.layers.find(l => l.id == layerId);
         if (layer) {
             layer.instance.setOpacity(opacity);
+            this.updateLayerList();
+        }
+    }
+
+    /**
+     * Establece la visibilidad de una capa de forma explícita
+     */
+    setLayerVisibility(layerId: string | number, visible: boolean) {
+        const layer = this.layers.find(l => l.id == layerId);
+        if (layer) {
+            layer.instance.setVisible(visible);
             this.updateLayerList();
         }
     }
@@ -359,15 +370,15 @@ export class MapService {
      * Alterna la visibilidad de una capa
      */
     toggleLayerVisibility(layerId: string | number) {
-        const layer = this.layers.find(l => l.id === layerId);
+        const layer = this.layers.find(l => l.id == layerId);
         if (layer) {
             // Si es una capa base, asegurar que solo una esté visible
             if (layer.type === 'base') {
                 this.layers.filter(l => l.type === 'base').forEach(bl => {
-                    bl.instance.setVisible(bl.id === layerId);
+                    bl.instance.setVisible(bl.id == layerId);
                 });
             } else {
-                layer.instance.setVisible(!layer.visible);
+                layer.instance.setVisible(!layer.instance.getVisible());
             }
             this.updateLayerList();
         }
@@ -381,33 +392,45 @@ export class MapService {
     /**
      * Activa la herramienta de comparación (swipe) para una capa
      */
-    enableSwipe(layerId: string | number) {
+    enableSwipe(layerId: string | number, side: 'left' | 'right' = 'left') {
         const key = String(layerId);
-        if (this.swipeListeners.has(key)) return;
+        // Desactivar si ya existe para asegurar que el lado sea el correcto
+        if (this.swipeListeners.has(key)) {
+            this.disableSwipe(layerId);
+        }
 
-        const layer = this.layers.find(l => l.id === layerId)?.instance;
-        if (!layer) return;
+        // Buscar capa por ID de forma robusta
+        const layer = (this.map.getLayers().getArray().find(l => l.get('id') == layerId)) as any;
+        if (!layer) {
+            console.warn(`MapService: No se pudo encontrar la capa ${layerId} para activar swipe`);
+            return;
+        }
 
         const prerender = (event: any) => {
             const ctx = event.context;
+            if (!ctx) return; // Skip if no canvas context (WebGL)
+
             const mapSize = this.map.getSize();
-            if (!mapSize || !ctx) return;
+            if (!mapSize) return;
 
-            // Importante: El contexto del canvas puede estar escalado (Retina/High-DPI)
             const pixelRatio = event.frameState?.pixelRatio || window.devicePixelRatio || 1;
-
+            const fullWidth = mapSize[0] * pixelRatio;
             const width = mapSize[0] * (this.swipePosition / 100) * pixelRatio;
             const height = mapSize[1] * pixelRatio;
 
             ctx.save();
             ctx.beginPath();
-            ctx.rect(0, 0, width, height);
+            if (side === 'left') {
+                ctx.rect(0, 0, width, height);
+            } else {
+                ctx.rect(width, 0, fullWidth - width, height);
+            }
             ctx.clip();
         };
 
         const postrender = (event: any) => {
             const ctx = event.context;
-            ctx.restore();
+            if (ctx) ctx.restore();
         };
 
         layer.on('prerender', prerender);
@@ -425,14 +448,29 @@ export class MapService {
         const listeners = this.swipeListeners.get(key);
 
         if (listeners) {
-            const layer = this.layers.find(l => l.id === layerId)?.instance;
+            // Buscar instancia directamente en el mapa con comparación de tipo flexible
+            const layer = this.map.getLayers().getArray().find(l => l.get('id') == layerId) as any;
             if (layer) {
                 layer.un('prerender', listeners.prerender);
                 layer.un('postrender', listeners.postrender);
+                console.log(`MapService: Swipe desactivado para capa ${layerId}`);
+            } else {
+                console.warn(`MapService: Se intentó desactivar swipe para ${layerId} pero no se encontró la capa`);
             }
             this.swipeListeners.delete(key);
             this.map.render();
         }
+    }
+
+    /**
+     * Desactiva swipe en todas las capas
+     */
+    disableAllSwipe() {
+        this.swipeListeners.forEach((_, key) => {
+            this.disableSwipe(key);
+        });
+        this.swipeListeners.clear();
+        this.map.render();
     }
 
     private swipePosition = 50;

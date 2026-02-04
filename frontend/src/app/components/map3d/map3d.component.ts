@@ -65,7 +65,7 @@ export class Map3dComponent implements OnInit, AfterViewInit, OnDestroy {
       } else if (layer.layer_type === '3d_model') {
         // Si es tileset, usar add3DTileset
         if (filePath.toLowerCase().endsWith('tileset.json')) {
-          this.map3dService.add3DTileset(fileUrl);
+          this.map3dService.add3DTileset(fileUrl, layer.id);
         } else {
           // Para otros modelos, se necesita posición (asumimos centro de bounds si existen)
           const pos: [number, number, number] = metadata.center || [-74.006, 4.711, 0];

@@ -2,6 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MapService } from '../../services/map.service';
+import { Map3dService } from '../../services/map3d.service';
 import { ProjectContextService } from '../../services/project-context.service';
 import { ProjectService } from '../../services/project.service';
 import { ToastService } from '../../services/toast.service';
@@ -104,11 +105,6 @@ import { Layer, Folder } from '../../models/models';
             </label>
             
             <div class="layer-actions">
-              <!-- Swipe Button -->
-              <button class="action-btn swipe-btn" (click)="openCompareTool(layer.id); $event.stopPropagation()" title="Comparar (Swipe)">
-                <i class="fas fa-columns"></i>
-              </button>
-
               <!-- Reordering Buttons -->
               <button class="action-btn mini" (click)="reorderLayer(layer, 1); $event.stopPropagation()" title="Subir">
                 <i class="fas fa-chevron-up"></i>
@@ -239,18 +235,18 @@ import { Layer, Folder } from '../../models/models';
     
     .layer-actions { 
         display: flex; 
-        gap: 4px; 
+        gap: 6px; 
         align-items: center; 
         flex-shrink: 0;
     }
     
     .action-btn { 
       background: none; border: none; color: #94a3b8; cursor: pointer; 
-      width: 28px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
       transition: all 0.2s;
     }
     .action-btn:hover { color: #00c1d2; background: rgba(0, 193, 210, 0.1); }
-    .action-btn.mini { width: 20px; height: 20px; font-size: 0.7rem; }
+    .action-btn.mini { width: 24px; height: 24px; font-size: 0.75rem; }
     
     /* Swipe Button - Styled to match theme */
     .swipe-btn {
@@ -337,6 +333,7 @@ export class LayerControlComponent implements OnInit {
   isCollapsed = false;
 
   private mapService = inject(MapService);
+  private map3dService = inject(Map3dService);
   private projectContext = inject(ProjectContextService);
   private projectService = inject(ProjectService);
   private toastService = inject(ToastService);
@@ -448,12 +445,18 @@ export class LayerControlComponent implements OnInit {
     });
   }
 
-  toggleVisibility(id: string) {
+  toggleVisibility(id: string | number) {
     this.mapService.toggleLayerVisibility(id);
+    const layer = this.layers.find(l => l.id === id);
+    if (layer) {
+      this.map3dService.setLayerVisibility(id, !layer.visible);
+    }
   }
 
-  setOpacity(id: string, event: any) {
-    this.mapService.setLayerOpacity(id, parseFloat(event.target.value));
+  setOpacity(id: string | number, event: any) {
+    const opacity = parseFloat(event.target.value);
+    this.mapService.setLayerOpacity(id, opacity);
+    this.map3dService.setLayerOpacity(id, opacity);
   }
 
   zoomToLayer(layer: any) {
@@ -473,16 +476,24 @@ export class LayerControlComponent implements OnInit {
   }
 
   reorderLayer(layer: any, delta: number) {
+    console.log(`LayerControl: Manual reorder request for layer ${layer.id} (name: ${layer.name}, current Z: ${layer.z_index}) with delta: ${delta}`);
+
     const currentZ = layer.z_index || 0;
     const newZ = Math.max(0, currentZ + delta);
 
+    // Actualizar mapa localmente
     this.mapService.setLayerZIndex(layer.id, newZ);
     layer.z_index = newZ;
 
+    // Sincronizar con base de datos si es una capa persistente
     if (typeof layer.id === 'number') {
       this.projectService.updateLayer(layer.id, { z_index: newZ }).subscribe({
         next: () => {
           this.toastService.show(`Orden actualizado: Nivel ${newZ}`, 'info');
+        },
+        error: (err) => {
+          console.error('Error updating layer order:', err);
+          this.toastService.show('Error al actualizar orden', 'error');
         }
       });
     }

@@ -22,7 +22,7 @@ import { Subscription } from 'rxjs';
           <label>Capa Superior (Izquierda):</label>
           <select [(ngModel)]="leftLayerId" (change)="onLayerChange()">
             <option [ngValue]="null">Seleccionar capa...</option>
-            <option *ngFor="let layer of availableLayers" [value]="layer.id">
+            <option *ngFor="let layer of availableLayers" [ngValue]="layer.id">
               {{ layer.name }}
             </option>
           </select>
@@ -32,7 +32,7 @@ import { Subscription } from 'rxjs';
           <label>Capa Base (Derecha):</label>
           <select [(ngModel)]="rightLayerId" (change)="onLayerChange()">
             <option [ngValue]="null">Seleccionar capa...</option>
-            <option *ngFor="let layer of availableLayers" [value]="layer.id">
+            <option *ngFor="let layer of availableLayers" [ngValue]="layer.id">
               {{ layer.name }}
             </option>
           </select>
@@ -246,6 +246,8 @@ export class LayerCompareComponent implements OnInit, OnDestroy {
   swipePosition: number = 50;
   overlayOpacity: number = 50;
 
+  private originalZIndexes: Map<string | number, number> = new Map();
+  private previouslyHiddenLayers: Set<string | number> = new Set();
   private layersSub: Subscription | undefined;
   private compareSub: Subscription | undefined;
 
@@ -268,17 +270,16 @@ export class LayerCompareComponent implements OnInit, OnDestroy {
         this.isActive = true;
         this.leftLayerId = layerId;
 
-        // Find another visible layer for comparison
-        const otherLayer = this.availableLayers.find(l => l.id !== layerId && l.visible && l.type !== 'base');
-        console.log('Layer Compare: Left Layer', this.leftLayerId, 'Right Layer', otherLayer?.id);
-
-        if (otherLayer) {
-          this.rightLayerId = otherLayer.id;
+        // Find another visible layer for comparison if one isn't already set
+        if (!this.rightLayerId) {
+          const otherLayer = this.availableLayers.find(l => l.id !== layerId && l.visible && l.type !== 'base');
+          if (otherLayer) {
+            this.rightLayerId = otherLayer.id;
+          }
         }
 
         this.applyComparison();
-        this.cdr.detectChanges(); // Force Angular to update the view
-        console.log('Layer Compare: isActive =', this.isActive);
+        this.cdr.detectChanges();
       }
     });
 
@@ -290,15 +291,11 @@ export class LayerCompareComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.layersSub) {
-      this.layersSub.unsubscribe();
-    }
-    if (this.compareSub) {
-      this.compareSub.unsubscribe();
-    }
-    this.resetComparison(); // Ensure cleanup
+    if (this.layersSub) this.layersSub.unsubscribe();
+    if (this.compareSub) this.compareSub.unsubscribe();
 
-    // Remove event listeners
+    this.resetComparison();
+
     window.removeEventListener('mousemove', this.onDrag.bind(this));
     window.removeEventListener('mouseup', this.endDrag.bind(this));
     window.removeEventListener('touchmove', this.onDrag.bind(this));
@@ -307,7 +304,7 @@ export class LayerCompareComponent implements OnInit, OnDestroy {
 
   startDrag(event: MouseEvent | TouchEvent): void {
     this.dragActive = true;
-    event.preventDefault(); // Prevent text selection
+    event.preventDefault();
   }
 
   onDrag(event: MouseEvent | TouchEvent): void {
@@ -333,12 +330,6 @@ export class LayerCompareComponent implements OnInit, OnDestroy {
     this.dragActive = false;
   }
 
-
-
-  openCompare(): void {
-    this.isActive = true;
-  }
-
   closeCompare(): void {
     this.isActive = false;
     this.resetComparison();
@@ -346,30 +337,14 @@ export class LayerCompareComponent implements OnInit, OnDestroy {
 
   setCompareMode(mode: 'swipe' | 'opacity'): void {
     this.compareMode = mode;
-    // Clean up previous mode effects
-    if (this.leftLayerId) {
-      this.mapService.disableSwipe(this.leftLayerId);
-      this.map3dService.disableSwipe(this.leftLayerId);
-      this.mapService.setLayerOpacity(this.leftLayerId, 1);
-    }
+    // Cleanup swipe listeners before changing mode
+    this.mapService.disableAllSwipe();
+    this.map3dService.disableAllSwipe();
+
     this.applyComparison();
   }
 
   onLayerChange(): void {
-    // If we change layers, we should reset the effects on old layers
-    // This is tricky without tracking old IDs.
-    // For simplicity, we disable swipe on all available layers or just ensure applyComparison handles it.
-    // Better: applyComparison() logic should handle state, but here we assume users select and we re-apply.
-    // To be safe, we can disable swipe on everything before reapplying.
-
-    this.availableLayers.forEach(l => {
-      this.mapService.disableSwipe(l.id);
-      this.map3dService.disableSwipe(l.id);
-      // Note: this might reset opacity if we forced it? No, disableSwipe only removes listener.
-      // We should probably reset opacity to 1 or previous state if we were in opacity mode.
-      // But we don't know previous state.
-    });
-
     this.applyComparison();
   }
 
@@ -383,82 +358,119 @@ export class LayerCompareComponent implements OnInit, OnDestroy {
   onOpacityChange(): void {
     if (this.compareMode === 'opacity' && this.leftLayerId) {
       this.mapService.setLayerOpacity(this.leftLayerId, this.overlayOpacity / 100);
+      this.map3dService.setLayerOpacity(this.leftLayerId, this.overlayOpacity / 100);
     }
   }
 
   applyComparison(): void {
     if (!this.leftLayerId || !this.rightLayerId) return;
 
-    // Ensure visibility
+    // Avoid comparing same layer
+    if (this.leftLayerId == this.rightLayerId) {
+      console.warn('LayerCompare: Cannot compare a layer with itself');
+      return;
+    }
+
+    console.log(`LayerCompare: Applying comparison between ${this.leftLayerId} and ${this.rightLayerId}`);
+
+    // Reset currently active effects to avoid state mess
+    this.mapService.disableAllSwipe();
+    this.map3dService.disableAllSwipe();
+
+    // 1. Hide all OTHER non-base layers
+    this.availableLayers.forEach(layer => {
+      const isSelected = layer.id == this.leftLayerId || layer.id == this.rightLayerId;
+      if (layer.type !== 'base' && !isSelected) {
+        if (layer.visible) {
+          this.previouslyHiddenLayers.add(layer.id);
+          this.mapService.setLayerVisibility(layer.id, false);
+          this.map3dService.setLayerVisibility(layer.id, false);
+        }
+      }
+    });
+
+    // 2. Save original z-indexes
+    if (!this.originalZIndexes.has(this.leftLayerId)) {
+      const l = this.availableLayers.find(layer => layer.id == this.leftLayerId);
+      if (l) this.originalZIndexes.set(this.leftLayerId, l.z_index || 0);
+    }
+    if (!this.originalZIndexes.has(this.rightLayerId)) {
+      const r = this.availableLayers.find(layer => layer.id == this.rightLayerId);
+      if (r) this.originalZIndexes.set(this.rightLayerId, r.z_index || 0);
+    }
+
+    // 3. Ensure both selected layers are VISIBLE
     const leftLayer = this.availableLayers.find(l => l.id == this.leftLayerId);
+    if (leftLayer && !leftLayer.visible) {
+      this.mapService.setLayerVisibility(this.leftLayerId, true);
+      this.map3dService.setLayerVisibility(this.leftLayerId, true);
+    }
+
     const rightLayer = this.availableLayers.find(l => l.id == this.rightLayerId);
+    if (rightLayer && !rightLayer.visible) {
+      this.mapService.setLayerVisibility(this.rightLayerId, true);
+      this.map3dService.setLayerVisibility(this.rightLayerId, true);
+    }
 
-    if (leftLayer && !leftLayer.visible) this.mapService.toggleLayerVisibility(leftLayer.id);
-    if (rightLayer && !rightLayer.visible) this.mapService.toggleLayerVisibility(rightLayer.id);
+    // 4. Set stack order (Z-index)
+    this.mapService.setLayerZIndex(this.rightLayerId, 100);
+    this.mapService.setLayerZIndex(this.leftLayerId, 200);
 
+    // In 3D
+    this.map3dService.bringToFront(this.rightLayerId); // Lower first
+    this.map3dService.bringToFront(this.leftLayerId);  // Top second
+
+    // 5. Apply mode effects
     if (this.compareMode === 'swipe') {
-      // Swipe Mode
-      // Left Layer (Top) gets Swipe applied
-      // Right Layer (Bottom) is just below
-      // Set Z-Indexes
-      this.mapService.setLayerZIndex(this.rightLayerId, 100);
-      this.mapService.setLayerZIndex(this.leftLayerId, 200);
-
-      // Reset opacity to 1 for swipe
       this.mapService.setLayerOpacity(this.leftLayerId, 1);
       this.mapService.setLayerOpacity(this.rightLayerId, 1);
+      this.map3dService.setLayerOpacity(this.leftLayerId, 1);
+      this.map3dService.setLayerOpacity(this.rightLayerId, 1);
 
-      // Enable swipe on top layer (2D)
-      this.mapService.enableSwipe(this.leftLayerId);
+      this.mapService.enableSwipe(this.leftLayerId, 'left');
+      this.mapService.enableSwipe(this.rightLayerId, 'right');
       this.mapService.setSwipePosition(this.swipePosition);
 
-      // Enable swipe on top layer (3D)
-      this.map3dService.enableSwipe(this.leftLayerId);
+      this.map3dService.enableSwipe(this.leftLayerId, 'left');
+      this.map3dService.enableSwipe(this.rightLayerId, 'right');
       this.map3dService.setSwipePosition(this.swipePosition);
-
-    } else if (this.compareMode === 'opacity') {
+    } else {
       // Opacity Mode
-      // Left Layer (Top) has variable opacity
-      // Right Layer (Bottom) is opaque
-
-      this.mapService.setLayerZIndex(this.rightLayerId, 100);
-      this.mapService.setLayerZIndex(this.leftLayerId, 200);
-
-      this.mapService.disableSwipe(this.leftLayerId); // Ensure no swipe
-      this.map3dService.disableSwipe(this.leftLayerId);
-
       this.mapService.setLayerOpacity(this.leftLayerId, this.overlayOpacity / 100);
       this.mapService.setLayerOpacity(this.rightLayerId, 1);
+      this.map3dService.setLayerOpacity(this.leftLayerId, this.overlayOpacity / 100);
+      this.map3dService.setLayerOpacity(this.rightLayerId, 1);
     }
+
+    this.cdr.detectChanges();
   }
 
   resetComparison(): void {
-    // Disable swipe on everything
-    if (this.availableLayers) {
-      this.availableLayers.forEach(l => {
-        this.mapService.disableSwipe(l.id);
-        this.map3dService.disableSwipe(l.id);
-      });
-    }
+    // Disable all swipe listeners
+    this.mapService.disableAllSwipe();
+    this.map3dService.disableAllSwipe();
 
-    if (this.leftLayerId) {
-      this.mapService.setLayerOpacity(this.leftLayerId, 1);
-    }
-    if (this.rightLayerId) {
-      this.mapService.setLayerOpacity(this.rightLayerId, 1);
-    }
+    // Restore original z-indexes and opacities
+    this.originalZIndexes.forEach((z, id) => {
+      this.mapService.setLayerZIndex(id, z);
+      const layer = this.availableLayers.find(l => l.id == id);
+      if (layer) {
+        this.mapService.setLayerOpacity(id, layer.opacity !== undefined ? layer.opacity : 1);
+        this.map3dService.setLayerOpacity(id, layer.opacity !== undefined ? layer.opacity : 1);
+      }
+    });
 
+    // Restore visibility of layers we hid
+    this.previouslyHiddenLayers.forEach(id => {
+      this.mapService.setLayerVisibility(id, true);
+      this.map3dService.setLayerVisibility(id, true);
+    });
+
+    this.originalZIndexes.clear();
+    this.previouslyHiddenLayers.clear();
     this.leftLayerId = null;
     this.rightLayerId = null;
     this.swipePosition = 50;
-    this.overlayOpacity = 100; // Reset to opaque
-  }
-
-  debugToggle(): void {
-    this.isActive = !this.isActive;
-    console.log('Debug Toggle: isActive =', this.isActive);
-    if (!this.isActive) {
-      this.resetComparison();
-    }
+    this.overlayOpacity = 50;
   }
 }
