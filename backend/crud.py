@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, or_, text
 from models import User, Project, Layer, Folder
 from schemas import UserCreate, ProjectCreate, LayerCreate, FolderCreate
@@ -41,6 +41,22 @@ def create_user(db: Session, user: UserCreate):
     db.refresh(db_user)
     return db_user
 
+def update_user(db: Session, user_id: int, user_update: dict):
+    db_user = get_user(db, user_id)
+    if not db_user:
+        return None
+    
+    if "password" in user_update and user_update["password"]:
+        user_update["hashed_password"] = get_password_hash(user_update.pop("password"))
+    
+    for key, value in user_update.items():
+        if hasattr(db_user, key) and value is not None:
+            setattr(db_user, key, value)
+            
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
 def delete_user(db: Session, user_id: int):
     db_user = get_user(db, user_id)
     if db_user:
@@ -49,13 +65,19 @@ def delete_user(db: Session, user_id: int):
     return db_user
 
 # --- PROJECT CRUD ---
-def get_projects(db: Session, user_id: int):
+def get_projects(db: Session, user_id: int, is_admin: bool = False):
     """
     Obtiene proyectos donde el usuario es dueño o está asignado.
-    Usamos una consulta optimizada para evitar problemas de carga de relaciones.
+    Si es admin, devuelve todos los proyectos con usuarios precargados.
     """
     try:
-        return db.query(Project).filter(
+        # Usamos selectinload para relaciones Muchos-a-Muchos por ser más eficiente y evitar duplicados
+        query = db.query(Project).options(selectinload(Project.assigned_users))
+        
+        if is_admin:
+            return query.all()
+            
+        return query.filter(
             or_(
                 Project.owner_id == user_id,
                 Project.assigned_users.any(id=user_id)
@@ -63,48 +85,81 @@ def get_projects(db: Session, user_id: int):
         ).all()
     except Exception as e:
         logger.error(f"Error en get_projects: {e}")
-        # Fallback: solo proyectos propios si la relación Many-to-Many falla
         return db.query(Project).filter(Project.owner_id == user_id).all()
 
 def create_project(db: Session, project: ProjectCreate, user_id: int):
     """
-    Crea un proyecto asegurando compatibilidad con PostgreSQL y SQLite.
+    Crea un proyecto y asigna usuarios iniciales si se proporcionan.
     """
     try:
-        # Convertir esquema Pydantic a diccionario
-        project_data = project.dict()
+        data = project.model_dump()
+        user_ids = data.pop("assigned_user_ids", [])
         
-        # Limpiar datos para evitar errores de tipos en SQLAlchemy/PostgreSQL
-        # Especialmente con fechas y campos opcionales
-        db_project = Project(
-            name=project_data.get("name"),
-            description=project_data.get("description"),
-            contract_number=project_data.get("contract_number"),
-            photo_url=project_data.get("photo_url"),
-            start_date=project_data.get("start_date"),
-            end_date=project_data.get("end_date"),
-            owner_id=user_id
-        )
+        db_project = Project(**data, owner_id=user_id)
         
+        if user_ids:
+            logger.info(f"Creando proyecto con usuarios: {user_ids}")
+            users = db.query(User).filter(User.id.in_(user_ids)).all()
+            db_project.assigned_users = users
+            
         db.add(db_project)
         db.commit()
-        db.refresh(db_project)
-        logger.info(f"Proyecto '{db_project.name}' creado exitosamente para el usuario {user_id}")
-        return db_project
+        
+        # Recargar con relaciones para la respuesta
+        return db.query(Project).options(
+            joinedload(Project.assigned_users),
+            joinedload(Project.layers),
+            joinedload(Project.folders)
+        ).filter(Project.id == db_project.id).first()
     except Exception as e:
         db.rollback()
-        logger.error(f"Error crítico al crear proyecto: {str(e)}")
+        logger.error(f"Error en create_project: {str(e)}")
         raise e
 
 def update_project(db: Session, project_id: int, project_data: dict):
+    """
+    Actualiza proyecto y su lista de usuarios asignados.
+    """
     db_project = db.query(Project).filter(Project.id == project_id).first()
-    if db_project:
+    if not db_project:
+        return None
+        
+    try:
+        # 1. Tratar usuarios asignados si vienen en la data
+        if "assigned_user_ids" in project_data:
+            user_ids = project_data.pop("assigned_user_ids")
+            
+            # Limpiar colección actual
+            db_project.assigned_users.clear()
+            
+            if user_ids:
+                clean_ids = [int(x) for x in user_ids if x is not None]
+                users_to_add = db.query(User).filter(User.id.in_(clean_ids)).all()
+                
+                # Agregar nuevos usuarios
+                for u in users_to_add:
+                    db_project.assigned_users.append(u)
+            
+            db.flush()
+        
+        # 2. Actualizar otros campos (nombre, descripción, etc.)
         for key, value in project_data.items():
             if hasattr(db_project, key):
                 setattr(db_project, key, value)
+        
         db.commit()
-        db.refresh(db_project)
-    return db_project
+        
+        # 3. Respuesta final con relaciones cargadas
+        return db.query(Project).options(
+            joinedload(Project.assigned_users),
+            joinedload(Project.layers),
+            joinedload(Project.folders)
+        ).filter(Project.id == project_id).first()
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error al actualizar proyecto {project_id}: {str(e)}")
+        raise e
 
 def delete_project(db: Session, project_id: int):
     db_project = db.query(Project).filter(Project.id == project_id).first()
@@ -119,6 +174,16 @@ def assign_user_to_project(db: Session, user_id: int, project_id: int):
     if user and project:
         if user not in project.assigned_users:
             project.assigned_users.append(user)
+            db.commit()
+            db.refresh(project)
+    return project
+
+def remove_user_from_project(db: Session, user_id: int, project_id: int):
+    user = get_user(db, user_id)
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if user and project:
+        if user in project.assigned_users:
+            project.assigned_users.remove(user)
             db.commit()
             db.refresh(project)
     return project

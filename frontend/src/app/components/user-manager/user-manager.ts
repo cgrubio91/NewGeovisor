@@ -19,12 +19,20 @@ export class UserManager implements OnInit {
   projects: Project[] = [];
   isLoading = false;
   showCreateForm = false;
+  isEditing = false;
+  editingUserId: number | null = null;
 
-  // New User Form
+  // Search and Filter
+  searchQuery = '';
+  roleFilter = 'all';
+
+  // Form Fields (used for both create and edit)
   newUsername = '';
   newEmail = '';
   newFullName = '';
   newPassword = '';
+  newRole = 'usuario';
+  isActive = true;
 
   // Assignment info
   selectedUserId: number | null = null;
@@ -38,6 +46,19 @@ export class UserManager implements OnInit {
   ngOnInit() {
     this.loadUsers();
     this.loadAllProjects();
+  }
+
+  get filteredUsers(): User[] {
+    return this.users.filter(user => {
+      const matchesSearch =
+        user.username.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+        (user.full_name || '').toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+        user.email.toLowerCase().includes(this.searchQuery.toLowerCase());
+
+      const matchesRole = this.roleFilter === 'all' || user.role === this.roleFilter;
+
+      return matchesSearch && matchesRole;
+    });
   }
 
   loadUsers() {
@@ -70,31 +91,102 @@ export class UserManager implements OnInit {
   }
 
   createUser() {
-    if (!this.newUsername || !this.newEmail || !this.newPassword) {
+    if (!this.newUsername || !this.newEmail || (!this.isEditing && !this.newPassword)) {
       this.toastService.show('Complete los campos obligatorios', 'warning');
       return;
     }
 
     this.isLoading = true;
     this.cdr.detectChanges();
-    this.authService.createUser({
-      username: this.newUsername,
-      email: this.newEmail,
-      full_name: this.newFullName,
-      password: this.newPassword
-    }).pipe(finalize(() => {
-      this.isLoading = false;
-      this.cdr.detectChanges();
-    }))
+
+    if (this.isEditing && this.editingUserId) {
+      // Logic for Update
+      const updateData: any = {
+        full_name: this.newFullName,
+        role: this.newRole,
+        is_active: this.isActive
+      };
+      if (this.newPassword) updateData.password = this.newPassword;
+
+      this.authService.updateUser(this.editingUserId, updateData)
+        .pipe(finalize(() => {
+          this.isLoading = false;
+          this.cdr.detectChanges();
+        }))
+        .subscribe({
+          next: (updatedUser) => {
+            this.users = this.users.map(u => u.id === updatedUser.id ? updatedUser : u);
+            this.toastService.show('Usuario actualizado correctamente', 'success');
+            this.cancelEdit();
+            this.cdr.detectChanges();
+          },
+          error: (err) => this.toastService.show('Error al actualizar usuario', 'error')
+        });
+    } else {
+      // Logic for Create
+      this.authService.createUser({
+        username: this.newUsername,
+        email: this.newEmail,
+        full_name: this.newFullName,
+        password: this.newPassword,
+        role: this.newRole
+      }).pipe(finalize(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }))
+        .subscribe({
+          next: (user) => {
+            this.users = [user, ...this.users];
+            this.toastService.show('Usuario creado exitosamente', 'success');
+            this.resetForm();
+            this.showCreateForm = false;
+            this.cdr.detectChanges();
+          },
+          error: (err) => this.toastService.show('Error al crear usuario', 'error')
+        });
+    }
+  }
+
+  editUser(user: User) {
+    this.isEditing = true;
+    this.showCreateForm = true;
+    this.editingUserId = user.id;
+
+    this.newUsername = user.username;
+    this.newEmail = user.email;
+    this.newFullName = user.full_name || '';
+    this.newRole = user.role || 'usuario';
+    this.isActive = user.is_active;
+    this.newPassword = ''; // Clear password field for security
+
+    this.cdr.detectChanges();
+  }
+
+  cancelEdit() {
+    this.isEditing = false;
+    this.showCreateForm = false;
+    this.editingUserId = null;
+    this.resetForm();
+    this.cdr.detectChanges();
+  }
+
+  toggleUserStatus(user: User) {
+    this.isLoading = true;
+    this.authService.updateUser(user.id, { is_active: !user.is_active })
+      .pipe(finalize(() => {
+        this.isLoading = false;
+        this.cdr.detectChanges();
+      }))
       .subscribe({
-        next: (user) => {
-          this.users = [user, ...this.users];
-          this.toastService.show('Usuario creado exitosamente', 'success');
-          this.resetForm();
-          this.showCreateForm = false;
-          this.loadUsers();
+        next: (updatedUser) => {
+          this.users = this.users.map(u => u.id === updatedUser.id ? updatedUser : u);
+          this.toastService.show(
+            `Usuario ${updatedUser.is_active ? 'activado' : 'desactivado'} correctamente`,
+            'success'
+          );
+          this.cdr.detectChanges();
         },
-        error: (err) => this.toastService.show('Error al crear usuario', 'error')
+        error: (err) => this.toastService.show('Error al cambiar estado del usuario', 'error')
       });
   }
 
@@ -103,7 +195,7 @@ export class UserManager implements OnInit {
       this.toastService.show('No puedes borrarte a ti mismo', 'warning');
       return;
     }
-    if (!confirm(`¿Eliminar al usuario ${user.username}?`)) return;
+    if (!confirm(`¿Eliminar al usuario ${user.username}? Esta acción es irreversible.`)) return;
 
     this.authService.deleteUser(user.id).subscribe({
       next: () => {
@@ -111,7 +203,8 @@ export class UserManager implements OnInit {
         this.toastService.show('Usuario eliminado', 'success');
         if (this.selectedUserId === user.id) this.selectedUserId = null;
         this.cdr.detectChanges();
-      }
+      },
+      error: (err) => this.toastService.show('Error al eliminar usuario', 'error')
     });
   }
 
@@ -145,5 +238,7 @@ export class UserManager implements OnInit {
     this.newEmail = '';
     this.newFullName = '';
     this.newPassword = '';
+    this.newRole = 'usuario';
+    this.isActive = true;
   }
 }

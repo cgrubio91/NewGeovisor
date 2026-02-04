@@ -29,6 +29,11 @@ import rasterio
 from rasterio.windows import from_bounds
 from rasterio.vrt import WarpedVRT
 from rasterio.enums import Resampling
+import logging
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Importaciones locales
 import crud, models, schemas
@@ -98,7 +103,31 @@ async def get_current_user(db: Session = Depends(get_db), token: str = Depends(o
     user = crud.get_user_by_username(db, username=token_data.email)
     if user is None:
         raise credentials_exception
+    
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cuenta desactivada. Contacte a soporte@mabtec.com.co"
+        )
     return user
+
+def check_role(required_roles: list):
+    """
+    Dependencia para verificar si el usuario tiene uno de los roles requeridos.
+    Roles: administrador, director, usuario
+    """
+    def role_checker(current_user: models.User = Depends(get_current_user)):
+        # El superuser siempre tiene acceso a todo
+        if getattr(current_user, 'is_superuser', False) or current_user.role == 'administrador':
+            return current_user
+            
+        if current_user.role not in required_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"El rol '{current_user.role}' no tiene permisos para esta acción. Se requiere: {required_roles}"
+            )
+        return current_user
+    return role_checker
 
 # --- ENDPOINTS ---
 
@@ -110,12 +139,23 @@ async def root():
 # --- AUTH ENDPOINTS ---
 @app.post("/token", response_model=schemas.Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # Permitir login por username o por email
     user = crud.get_user_by_username(db, username=form_data.username)
+    if not user:
+        user = crud.get_user_by_email(db, email=form_data.username)
+
     if not user or not crud.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect username, email or password",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Verificar si el usuario está activo
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Su usuario está desactivado. Contacte a soporte en soporte@mabtec.com.co para restaurar su acceso."
         )
     # Actualizar contador de inicios de sesión
     user.login_count = (user.login_count or 0) + 1
@@ -134,13 +174,13 @@ async def read_users_me(current_user: models.User = Depends(get_current_user)):
 
 # --- USER ENDPOINTS ---
 @app.get("/users/", response_model=List[schemas.UserRead])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador']))):
     # if not current_user.is_superuser:
     #      raise HTTPException(status_code=403, detail="Not enough permissions")
     return crud.get_users(db, skip=skip, limit=limit)
 
 @app.post("/users/", response_model=schemas.UserRead)
-def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador']))):
     db_user = crud.get_user_by_email(db, email=user.email)
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -149,20 +189,35 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username already taken")
     return crud.create_user(db=db, user=user)
 
+@app.patch("/users/{user_id}", response_model=schemas.UserRead)
+def update_user(user_id: int, user_update: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(["administrador"]))):
+    db_user = crud.update_user(db, user_id, user_update.model_dump(exclude_unset=True))
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db_user
+
 @app.delete("/users/{user_id}", response_model=schemas.UserRead)
-def delete_user(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def delete_user(user_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador']))):
     if not current_user.is_superuser and current_user.id != user_id:
          raise HTTPException(status_code=403, detail="Not enough permissions to delete this user")
     return crud.delete_user(db, user_id)
 
 # --- PROJECT ENDPOINTS ---
 @app.post("/projects/", response_model=schemas.ProjectRead)
-def create_project(project: schemas.ProjectCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def create_project(project: schemas.ProjectCreate, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador']))):
     return crud.create_project(db=db, project=project, user_id=current_user.id)
+
+@app.patch("/projects/{project_id}", response_model=schemas.ProjectRead)
+def update_project(project_id: int, project_update: schemas.ProjectUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador']))):
+    db_project = crud.update_project(db, project_id, project_update.model_dump(exclude_unset=True))
+    if not db_project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return db_project
 
 @app.get("/projects/", response_model=List[schemas.ProjectRead])
 def read_projects(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return crud.get_projects(db, user_id=current_user.id)
+    is_admin = current_user.role == "administrador" or current_user.is_superuser
+    return crud.get_projects(db, user_id=current_user.id, is_admin=is_admin)
 
 @app.get("/projects/by-id/{project_id}", response_model=schemas.ProjectRead)
 def read_project(project_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -179,7 +234,7 @@ def read_project(project_id: int, db: Session = Depends(get_db), current_user: m
     return project
 
 @app.post("/projects/assign")
-def assign_project(assignment: schemas.ProjectAssign, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def assign_project(assignment: schemas.ProjectAssign, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador']))):
     """Asignar un usuario a un proyecto"""
     project = db.query(models.Project).filter(models.Project.id == assignment.project_id).first()
     if not project:
@@ -192,8 +247,21 @@ def assign_project(assignment: schemas.ProjectAssign, db: Session = Depends(get_
     crud.assign_user_to_project(db, assignment.user_id, assignment.project_id)
     return {"message": "User assigned to project successfully"}
 
+@app.post("/projects/unassign")
+def unassign_project(assignment: schemas.ProjectAssign, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador']))):
+    """Quitar un usuario de un proyecto"""
+    project = db.query(models.Project).filter(models.Project.id == assignment.project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+        
+    if project.owner_id != current_user.id and not current_user.is_superuser:
+        raise HTTPException(status_code=403, detail="Only owner or admin can unassign users")
+        
+    crud.remove_user_from_project(db, assignment.user_id, assignment.project_id)
+    return {"message": "User removed from project successfully"}
+
 @app.delete("/projects/{project_id}")
-def delete_project(project_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def delete_project(project_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador']))):
     # Buscar solo el ID y owner_id para el chequeo de permisos minimizando carga de relaciones
     project_data = db.query(models.Project.id, models.Project.owner_id).filter(models.Project.id == project_id).first()
     
@@ -209,11 +277,12 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
 @app.get("/dashboard/stats")
 def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Obtener estadísticas reales para el dashboard"""
-    return crud.get_dashboard_stats(db, user_id=current_user.id, is_admin=current_user.is_superuser)
+    is_admin = current_user.role == "administrador" or current_user.is_superuser
+    return crud.get_dashboard_stats(db, user_id=current_user.id, is_admin=is_admin)
 
 # --- FOLDER ENDPOINTS ---
 @app.post("/folders/", response_model=schemas.FolderRead)
-def create_folder(folder: schemas.FolderCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def create_folder(folder: schemas.FolderCreate, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador', 'director']))):
     project = db.query(models.Project).filter(models.Project.id == folder.project_id).first()
     if not project or (project.owner_id != current_user.id and current_user not in project.assigned_users):
          raise HTTPException(status_code=403, detail="Access denied to project")
@@ -235,7 +304,7 @@ async def upload_files(
     project_id: int = Form(...),
     folder_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(check_role(['administrador', 'director']))
 ):
     """
     Endpoint para subir archivos geoespaciales de múltiples formatos.
@@ -391,7 +460,7 @@ def get_project_layers(
     return layers
 
 @app.delete("/layers/{layer_id}")
-def delete_layer(layer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def delete_layer(layer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(check_role(['administrador', 'director']))):
     """Eliminar una capa"""
     layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
     if not layer:
@@ -407,7 +476,7 @@ def update_layer(
     layer_id: int, 
     layer_update: schemas.LayerUpdate, 
     db: Session = Depends(get_db), 
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(check_role(['administrador', 'director']))
 ):
     """
     Actualizar propiedades de una capa (visibilidad, opacidad, z-index, etc.)
@@ -556,4 +625,5 @@ async def get_file(filename: str):
 if __name__ == "__main__":
     import uvicorn
     # En producción, esto se manejará vía Gunicorn/Docker
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Activamos reload=True para desarrollo
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

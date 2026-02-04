@@ -1,10 +1,11 @@
-import { Component, EventEmitter, Output } from '@angular/core';
-
+import { Component, EventEmitter, Output, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { AuthService } from '../../services/auth.service';
 
 /**
  * Componente de encabezado principal
- * Muestra el logo de GMab Geomática y navegación principal
+ * Muestra el logo de GMab Geomática y navegación principal.
+ * Versión corregida: Remueve iconos innecesarios y añade logout.
  */
 @Component({
   selector: 'app-header',
@@ -49,7 +50,8 @@ import { CommonModule } from '@angular/common';
             <span>Visor de Mapas</span>
           </button>
           
-          <button class="nav-item" [class.active]="activeTab === 'users'" (click)="navigate('users')">
+          <button *ngIf="authService.currentUser()?.role === 'administrador'" 
+                  class="nav-item" [class.active]="activeTab === 'users'" (click)="navigate('users')">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
               <circle cx="9" cy="7" r="4"></circle>
@@ -62,30 +64,25 @@ import { CommonModule } from '@angular/common';
 
         <!-- Acciones del Usuario -->
         <div class="user-actions">
-          <button class="icon-btn" title="Notificaciones">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-              <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-            </svg>
-            <span class="notification-badge">3</span>
-          </button>
-          
-          <button class="icon-btn" title="Configuración">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M12 1v6m0 6v6m5.66-13.66l-4.24 4.24m0 6.84l4.24 4.24M23 12h-6m-6 0H1m18.66 5.66l-4.24-4.24m0-6.84l4.24-4.24"></path>
-            </svg>
-          </button>
-          
-          <div class="user-profile">
+          <!-- Solo se muestra si hay un usuario autenticado -->
+          <div class="user-profile" *ngIf="authService.currentUser() as user">
             <div class="avatar">
-              <span>U</span>
+              <span>{{ (user.full_name || user.username).charAt(0).toUpperCase() }}</span>
             </div>
             <div class="user-info">
-              <span class="user-name">Usuario</span>
-              <span class="user-role">Administrador</span>
+              <span class="user-name">{{ user.full_name || user.username }}</span>
+              <span class="user-role" style="text-transform: capitalize;">{{ user.role || 'Usuario' }}</span>
             </div>
           </div>
+
+          <!-- Botón de Logout -->
+          <button class="icon-btn logout-btn" title="Cerrar Sesión" (click)="logout()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+          </button>
         </div>
       </div>
     </header>
@@ -97,7 +94,7 @@ import { CommonModule } from '@angular/common';
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
       position: sticky;
       top: 0;
-      z-index: var(--z-sticky);
+      z-index: 1000;
       backdrop-filter: blur(10px);
     }
 
@@ -110,12 +107,11 @@ import { CommonModule } from '@angular/common';
       gap: 32px;
     }
 
-    /* Logo Section */
     .logo-section {
       display: flex;
       align-items: center;
       gap: 16px;
-      min-width: 280px;
+      min-width: 250px;
     }
 
     .logo {
@@ -131,23 +127,18 @@ import { CommonModule } from '@angular/common';
     }
 
     .brand-name {
-      font-family: var(--font-primary);
       font-size: 1.25rem;
       font-weight: 700;
       color: var(--text-primary);
-      letter-spacing: 0.5px;
     }
 
     .brand-subtitle {
-      font-family: var(--font-secondary);
       font-size: 0.75rem;
       color: var(--color-primary-cyan);
-      font-weight: 400;
-      letter-spacing: 1px;
       text-transform: uppercase;
+      letter-spacing: 1px;
     }
 
-    /* Navigation */
     .main-nav {
       display: flex;
       align-items: center;
@@ -157,7 +148,6 @@ import { CommonModule } from '@angular/common';
     }
 
     .nav-item {
-      font-family: var(--font-primary);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -166,23 +156,10 @@ import { CommonModule } from '@angular/common';
       border: none;
       color: var(--text-secondary);
       cursor: pointer;
-      border-radius: var(--border-radius-md);
-      transition: all var(--transition-normal);
+      border-radius: 8px;
+      transition: all 0.2s;
       font-size: 0.9rem;
       font-weight: 500;
-      position: relative;
-    }
-
-    .nav-item::after {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 0;
-      height: 2px;
-      background: var(--color-primary-cyan);
-      transition: width var(--transition-normal);
     }
 
     .nav-item:hover {
@@ -190,24 +167,11 @@ import { CommonModule } from '@angular/common';
       background: rgba(0, 193, 210, 0.1);
     }
 
-    .nav-item:hover::after {
-      width: 80%;
-    }
-
     .nav-item.active {
       color: var(--color-primary-cyan);
       background: rgba(0, 193, 210, 0.15);
     }
 
-    .nav-item.active::after {
-      width: 80%;
-    }
-
-    .nav-item svg {
-      flex-shrink: 0;
-    }
-
-    /* User Actions */
     .user-actions {
       display: flex;
       align-items: center;
@@ -217,15 +181,14 @@ import { CommonModule } from '@angular/common';
     }
 
     .icon-btn {
-      position: relative;
       width: 40px;
       height: 40px;
-      border-radius: var(--border-radius-md);
+      border-radius: 8px;
       background: rgba(0, 193, 210, 0.1);
       border: 1px solid rgba(0, 193, 210, 0.2);
       color: var(--text-secondary);
       cursor: pointer;
-      transition: all var(--transition-normal);
+      transition: all 0.2s;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -236,65 +199,42 @@ import { CommonModule } from '@angular/common';
       border-color: var(--color-primary-cyan);
       color: var(--color-primary-cyan);
       transform: translateY(-2px);
-      box-shadow: var(--shadow-glow-cyan);
     }
 
-    .notification-badge {
-      position: absolute;
-      top: -4px;
-      right: -4px;
-      background: var(--color-primary-orange);
-      color: white;
-      font-size: 0.7rem;
-      font-weight: 700;
-      padding: 2px 6px;
-      border-radius: var(--border-radius-full);
-      min-width: 18px;
-      text-align: center;
-      box-shadow: 0 2px 8px rgba(255, 103, 28, 0.4);
+    .logout-btn:hover {
+      background: rgba(239, 68, 68, 0.1) !important;
+      border-color: rgba(239, 68, 68, 0.5) !important;
+      color: #ef4444 !important;
     }
 
     .user-profile {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 6px 12px 6px 6px;
+      padding: 6px 12px;
       background: rgba(0, 193, 210, 0.1);
       border: 1px solid rgba(0, 193, 210, 0.2);
-      border-radius: var(--border-radius-lg);
-      cursor: pointer;
-      transition: all var(--transition-normal);
-    }
-
-    .user-profile:hover {
-      background: rgba(0, 193, 210, 0.15);
-      border-color: var(--color-primary-cyan);
-      box-shadow: var(--shadow-glow-cyan);
+      border-radius: 12px;
     }
 
     .avatar {
       width: 36px;
       height: 36px;
-      border-radius: var(--border-radius-md);
-      background: linear-gradient(135deg, var(--color-primary-cyan), var(--color-cyan-dark));
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--color-primary-cyan), #008ba3);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: var(--font-primary);
       font-weight: 700;
-      font-size: 1rem;
       color: white;
-      box-shadow: var(--shadow-md);
     }
 
     .user-info {
       display: flex;
       flex-direction: column;
-      gap: 2px;
     }
 
     .user-name {
-      font-family: var(--font-primary);
       font-size: 0.9rem;
       font-weight: 600;
       color: var(--text-primary);
@@ -302,63 +242,33 @@ import { CommonModule } from '@angular/common';
 
     .user-role {
       font-size: 0.75rem;
-      color: var(--text-muted);
-    }
-
-    /* Responsive */
-    @media (max-width: 1200px) {
-      .brand-subtitle {
-        display: none;
-      }
-      
-      .nav-item span {
-        display: none;
-      }
-      
-      .nav-item {
-        padding: 10px;
-      }
+      color: #94a3b8;
     }
 
     @media (max-width: 768px) {
-      .header-container {
-        padding: 8px 16px;
-        gap: 16px;
-      }
-      
-      .logo-section {
-        min-width: auto;
-      }
-      
-      .logo {
-        height: 40px;
-      }
-      
-      .brand-text {
-        display: none;
-      }
-      
-      .main-nav {
-        gap: 4px;
-      }
-      
-      .user-info {
-        display: none;
-      }
-      
-      .user-actions {
-        min-width: auto;
-        gap: 8px;
-      }
+      .brand-text, .user-info { display: none; }
+      .nav-item span { display: none; }
+      .user-actions, .logo-section { min-width: auto; }
     }
   `]
 })
-export class HeaderComponent {
+export class HeaderComponent implements OnInit {
   @Output() onNavigate = new EventEmitter<string>();
-  activeTab = 'map'; // Default view
+  activeTab = 'map';
+
+  authService = inject(AuthService);
+
+  ngOnInit() {
+    console.log('HeaderComponent loaded. Current user:', this.authService.currentUser());
+  }
 
   navigate(tab: string) {
     this.activeTab = tab;
     this.onNavigate.emit(tab);
+  }
+
+  logout() {
+    this.authService.logout();
+    this.navigate('map');
   }
 }

@@ -5,6 +5,7 @@ export interface User {
     full_name?: string;
     is_active: boolean;
     is_superuser: boolean;
+    role?: string;
     created_at: string;
 }
 
@@ -30,6 +31,7 @@ export interface Project {
     layers: Layer[];
     folders: Folder[];
     assigned_users?: User[];
+    assigned_user_ids?: number[];
 }
 
 export interface Layer {

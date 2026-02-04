@@ -28,8 +28,16 @@ export class ProjectService {
         return this.http.delete(`${this.baseUrl}/projects/${projectId}`);
     }
 
+    updateProject(projectId: number, project: Partial<Project>): Observable<Project> {
+        return this.http.patch<Project>(`${this.baseUrl}/projects/${projectId}`, project);
+    }
+
     assignUserToProject(userId: number, projectId: number): Observable<Project> {
         return this.http.post<Project>(`${this.baseUrl}/projects/assign`, { user_id: userId, project_id: projectId });
+    }
+
+    unassignUserFromProject(userId: number, projectId: number): Observable<any> {
+        return this.http.post(`${this.baseUrl}/projects/unassign`, { user_id: userId, project_id: projectId });
     }
 
     // --- Folders ---

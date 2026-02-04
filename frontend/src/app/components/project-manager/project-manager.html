@@ -1,20 +1,26 @@
 <div class="project-manager-container fade-in">
     <div class="header-actions">
-        <h3>Proyectos</h3>
-        <button class="btn btn-primary" (click)="toggleCreateForm()" *ngIf="!showCreateForm">
+        <div>
+            <h3>Proyectos</h3>
+            <p class="text-muted small" *ngIf="isAdmin">Panel de Administración de Proyectos</p>
+        </div>
+        <button class="btn btn-primary" (click)="toggleCreateForm()" *ngIf="!showCreateForm && isAdmin">
             <i class="fas fa-plus"></i> Nuevo Proyecto
         </button>
         <button class="btn btn-secondary" (click)="toggleCreateForm()" *ngIf="showCreateForm">
-            <i class="fas fa-arrow-left"></i> Volver
+            <i class="fas fa-arrow-left"></i> Volver a la Lista
         </button>
     </div>
 
-    <!-- Create Project Form -->
-    <div class="create-form card slide-in-right" *ngIf="showCreateForm">
-        <h4>Crear Nuevo Proyecto</h4>
+    <!-- Formulario de Creación / Edición -->
+    <div class="create-form card slide-in-top" *ngIf="showCreateForm">
+        <div class="form-header">
+            <h4>{{ isEditing ? '✏️ Editando Proyecto: ' + newProjectName : '🏗️ Crear Nuevo Proyecto' }}</h4>
+        </div>
+
         <div class="form-grid">
             <div class="form-group full-width">
-                <label>Nombre del Proyecto</label>
+                <label>Nombre del Proyecto *</label>
                 <input type="text" [(ngModel)]="newProjectName" placeholder="Ej. Levantamiento Topográfico Norte">
             </div>
             <div class="form-group">
@@ -22,8 +28,8 @@
                 <input type="text" [(ngModel)]="newProjectContract" placeholder="Ej. CONTR-2024-001">
             </div>
             <div class="form-group">
-                <label>URL de Foto/Portada</label>
-                <input type="text" [(ngModel)]="newProjectPhoto" placeholder="Ej. https://example.com/photo.jpg">
+                <label>URL de Portada</label>
+                <input type="text" [(ngModel)]="newProjectPhoto" placeholder="Ej. https://images.com/cover.jpg">
             </div>
             <div class="form-group">
                 <label>Fecha de Inicio</label>
@@ -34,52 +40,127 @@
                 <input type="date" [(ngModel)]="newProjectEnd">
             </div>
             <div class="form-group full-width">
-                <label>Descripción</label>
-                <textarea [(ngModel)]="newProjectDesc" placeholder="Descripción opcional..."></textarea>
+                <label>Descripción del Proyecto</label>
+                <textarea [(ngModel)]="newProjectDesc" rows="3" placeholder="Detalles u observaciones..."></textarea>
             </div>
         </div>
+
+        <!-- SECCIÓN DE PERSONAL (STAGED) -->
+        <div class="user-assignment-section">
+            <div class="divider"></div>
+            <div class="section-title">
+                <i class="fas fa-users-cog"></i>
+                <h5>Gestión de Personal y Acceso</h5>
+                <span class="user-count-badge">{{ stagedUsers.length }} Usuarios</span>
+            </div>
+            <p class="text-muted small">Añade los usuarios que tendrán acceso a este proyecto. Los cambios se guardarán
+                al finalizar.</p>
+
+            <div class="assign-action">
+                <div class="search-user-wrapper">
+                    <div class="search-input-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" [(ngModel)]="userSearchQuery" placeholder="Buscar usuario por nombre..."
+                            (focus)="userSearchQuery = userSearchQuery || ''">
+                    </div>
+
+                    <!-- Dropdown de resultados de búsqueda -->
+                    <div class="search-results-dropdown" *ngIf="userSearchQuery && availableUsers.length > 0">
+                        <div class="search-item" *ngFor="let u of availableUsers" (click)="addStagedUser(u)">
+                            <span class="initials">{{ (u.full_name || u.username).charAt(0).toUpperCase() }}</span>
+                            <div class="user-meta">
+                                <span class="name">{{ u.full_name || u.username }}</span>
+                                <span class="role">{{ u.role }}</span>
+                            </div>
+                            <i class="fas fa-plus"></i>
+                        </div>
+                    </div>
+                    <div class="search-results-dropdown no-results"
+                        *ngIf="userSearchQuery && availableUsers.length === 0">
+                        <span>No se encontraron más usuarios activos.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lista de Usuarios Preparados (Staged) -->
+            <div class="assigned-users-list">
+                <div class="assigned-user-tag animate-pop" *ngFor="let u of stagedUsers">
+                    <div class="user-tag-info">
+                        <span class="initials">{{ (u.full_name || u.username).charAt(0).toUpperCase() }}</span>
+                        <span>{{ u.full_name || u.username }}</span>
+                    </div>
+                    <button class="btn-remove" (click)="removeStagedUser(u.id)" title="Quitar de la lista">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div *ngIf="stagedUsers.length === 0" class="empty-users">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Sin usuarios asignados. Solo los administradores podrán verlo.</span>
+                </div>
+            </div>
+        </div>
+
         <div class="form-actions">
+            <button class="btn btn-secondary" (click)="toggleCreateForm()">Cancelar</button>
             <button class="btn btn-primary" (click)="createProject()" [disabled]="!newProjectName || isLoading">
-                {{ isLoading ? 'Creando...' : 'Crear Proyecto' }}
+                <i class="fas fa-save"></i>
+                {{ isLoading ? ' Procesando...' : ' Guardar Proyecto y Accesos' }}
             </button>
         </div>
     </div>
 
-    <!-- Project List -->
+    <!-- Lista de Proyectos -->
     <div class="project-list" *ngIf="!showCreateForm">
+        <!-- (Mismo código de lista que antes, solo aseguro que use selectProject) -->
         <div *ngIf="isLoading && projects.length === 0" class="loading-state">
             <div class="spinner"></div>
-            <p>Cargando proyectos...</p>
+            <p>Sincronizando proyectos...</p>
         </div>
 
-        <div *ngIf="!isLoading && projects.length === 0" class="empty-state">
-            <p class="text-muted">No hay proyectos. Crea uno nuevo para comenzar.</p>
+        <div *ngIf="!isLoading && projects.length === 0" class="empty-state card">
+            <i class="fas fa-folder-open"></i>
+            <p>No hay proyectos. Crea uno nuevo.</p>
         </div>
 
-        <div class="project-card card" *ngFor="let project of projects" (click)="selectProject(project)">
-            <div class="project-image"
+        <div class="project-card card" *ngFor="let project of projects">
+            <div class="project-image" (click)="selectProject(project)"
                 [style.background-image]="project.photo_url ? 'url(' + project.photo_url + ')' : ''">
-                <i class="fas fa-map" *ngIf="!project.photo_url"></i>
+                <div class="image-placeholder" *ngIf="!project.photo_url">
+                    <i class="fas fa-map-marked-alt"></i>
+                </div>
+                <div class="view-overlay">
+                    <span>ENTRAR AL MAPA</span>
+                </div>
             </div>
-            <div class="project-info">
+
+            <div class="project-info" (click)="selectProject(project)">
                 <div class="project-title-row">
                     <h5>{{ project.name }}</h5>
                     <span class="badge" *ngIf="project.contract_number">{{ project.contract_number }}</span>
                 </div>
-                <p class="text-muted description">{{ project.description || 'Sin descripción' }}</p>
+                <p class="description">{{ project.description || 'Sin descripción' }}</p>
                 <div class="meta">
-                    <span class="date" title="Fecha de inicio"><i class="far fa-calendar"></i> {{ project.start_date |
-                        date:'dd/MM/yyyy' }}</span>
-                    <span class="layers-count"><i class="fas fa-layer-group"></i> {{ project.layers.length || 0 }}
-                        Capas</span>
+                    <span><i class="far fa-calendar-alt"></i> {{ project.start_date | date:'dd/MM/yy' }}</span>
+                    <span><i class="fas fa-layer-group"></i> {{ project.layers?.length || 0 }}</span>
+                    <span><i class="fas fa-users"></i> {{ project.assigned_users?.length || 0 }}</span>
                 </div>
             </div>
-            <div class="project-actions">
-                <button class="btn btn-sm btn-outline">Abrir</button>
-                <button class="btn btn-sm btn-danger-outline"
-                    (click)="$event.stopPropagation(); deleteProject(project)">
-                    <i class="fas fa-trash"></i>
+
+            <div class="project-footer">
+                <button class="btn btn-primary btn-flex" (click)="selectProject(project)">
+                    <i class="fas fa-external-link-alt"></i> Abrir
                 </button>
+
+                <div class="admin-actions-group" *ngIf="isAdmin">
+                    <button class="btn btn-icon-edit" (click)="$event.stopPropagation(); editProject(project)"
+                        title="Editar">
+                        <i class="fas fa-pencil-alt"></i>
+                    </button>
+                    <button class="btn btn-icon-delete" (click)="$event.stopPropagation(); deleteProject(project)"
+                        title="Eliminar">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

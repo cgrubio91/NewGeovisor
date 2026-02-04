@@ -17,9 +17,16 @@ class UserBase(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = True
     is_superuser: Optional[bool] = False
+    role: Optional[str] = "usuario"
 
 class UserCreate(UserBase):
     password: str # This will be the access code
+
+class UserUpdate(BaseModel):
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
 
 class UserRead(UserBase):
     id: int
@@ -90,7 +97,16 @@ class ProjectBase(BaseModel):
     photo_url: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
-    pass
+    assigned_user_ids: Optional[List[int]] = None
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    contract_number: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    photo_url: Optional[str] = None
+    assigned_user_ids: Optional[List[int]] = None
 
 class ProjectRead(ProjectBase):
     id: int

@@ -5,3 +5,5 @@ import { App } from './app/app';
 
 bootstrapApplication(App, appConfig)
   .catch((err) => console.error(err));
+// Force rebuild 02/03/2026 16:38:11
+// Force rebuild 02/03/2026 16:45:54

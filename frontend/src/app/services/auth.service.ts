@@ -60,6 +60,10 @@ export class AuthService {
         return this.http.delete(`${this.baseUrl}/users/${userId}`);
     }
 
+    updateUser(userId: number, data: any): Observable<User> {
+        return this.http.patch<User>(`${this.baseUrl}/users/${userId}`, data);
+    }
+
     getToken(): string | null {
         return localStorage.getItem('token');
     }

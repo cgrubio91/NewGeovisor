@@ -5,10 +5,10 @@ import { AuthService } from '../../services/auth.service';
 import { ToastService } from '../../services/toast.service';
 
 @Component({
-    selector: 'app-login',
-    standalone: true,
-    imports: [CommonModule, FormsModule],
-    template: `
+  selector: 'app-login',
+  standalone: true,
+  imports: [CommonModule, FormsModule],
+  template: `
     <div class="login-container">
       <div class="login-card">
         <div class="login-header">
@@ -19,10 +19,10 @@ import { ToastService } from '../../services/toast.service';
 
         <form (ngSubmit)="onSubmit()" #loginForm="ngForm">
           <div class="form-group">
-            <label for="username">Usuario</label>
+            <label for="username">Correo Electrónico</label>
             <div class="input-wrapper">
-              <i class="fas fa-user"></i>
-              <input type="text" id="username" name="username" [(ngModel)]="username" required placeholder="Ingresa tu usuario">
+              <i class="fas fa-envelope"></i>
+              <input type="text" id="username" name="username" [(ngModel)]="username" required placeholder="tu@correo.com">
             </div>
           </div>
 
@@ -46,7 +46,7 @@ import { ToastService } from '../../services/toast.service';
       </div>
     </div>
   `,
-    styles: [`
+  styles: [`
     .login-container {
       display: flex;
       justify-content: center;
@@ -193,30 +193,30 @@ import { ToastService } from '../../services/toast.service';
   `]
 })
 export class LoginComponent {
-    username = '';
-    password = '';
-    loading = signal(false);
+  username = '';
+  password = '';
+  loading = signal(false);
 
-    constructor(
-        private authService: AuthService,
-        private toastService: ToastService
-    ) { }
+  constructor(
+    private authService: AuthService,
+    private toastService: ToastService
+  ) { }
 
-    onSubmit() {
-        this.loading.set(true);
-        this.authService.login(this.username, this.password).subscribe({
-            next: () => {
-                this.loading.set(false);
-                this.toastService.show('Bienvenido al sistema', 'success');
-            },
-            error: (err) => {
-                this.loading.set(false);
-                this.toastService.show('Error de autenticación: ' + (err.error?.detail || 'Credenciales inválidas'), 'error');
-            }
-        });
-    }
+  onSubmit() {
+    this.loading.set(true);
+    this.authService.login(this.username, this.password).subscribe({
+      next: () => {
+        this.loading.set(false);
+        this.toastService.show('Bienvenido al sistema', 'success');
+      },
+      error: (err) => {
+        this.loading.set(false);
+        this.toastService.show('Error de autenticación: ' + (err.error?.detail || 'Credenciales inválidas'), 'error');
+      }
+    });
+  }
 
-    onLogoError(event: any) {
-        event.target.src = 'https://cdn-icons-png.flaticon.com/512/854/854878.png';
-    }
+  onLogoError(event: any) {
+    event.target.src = 'https://cdn-icons-png.flaticon.com/512/854/854878.png';
+  }
 }

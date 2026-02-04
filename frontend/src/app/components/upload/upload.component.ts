@@ -6,6 +6,7 @@ import { MapService } from '../../services/map.service';
 import { ToastService } from '../../services/toast.service';
 import { ProjectContextService } from '../../services/project-context.service';
 import { ProjectService } from '../../services/project.service';
+import { AuthService } from '../../services/auth.service';
 import { finalize } from 'rxjs/operators';
 
 /**
@@ -18,7 +19,7 @@ import { finalize } from 'rxjs/operators';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="upload-panel card" [class.collapsed]="isCollapsed">
+    <div *ngIf="canUpload" class="upload-panel card" [class.collapsed]="isCollapsed">
       <div class="panel-header" (click)="toggleCollapse()">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -300,6 +301,11 @@ export class UploadComponent {
   uploading = false;
   isCollapsed = false;
 
+  get canUpload(): boolean {
+    const role = this.authService.currentUser()?.role;
+    return role === 'administrador' || role === 'director';
+  }
+
   toggleCollapse() {
     this.isCollapsed = !this.isCollapsed;
   }
@@ -311,7 +317,8 @@ export class UploadComponent {
     private mapService: MapService,
     private projectContext: ProjectContextService,
     private projectService: ProjectService,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private authService: AuthService
   ) {
     this.projectContext.activeProject$.subscribe(project => {
       this.folders = project?.folders || [];

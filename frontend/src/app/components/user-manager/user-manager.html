@@ -1,23 +1,48 @@
 <div class="user-manager-container fade-in">
     <div class="header-actions">
-        <h3>Gestión de Usuarios</h3>
-        <button class="btn btn-primary" (click)="showCreateForm = !showCreateForm">
-            <i class="fas" [class.fa-plus]="!showCreateForm" [class.fa-arrow-left]="showCreateForm"></i>
-            {{ showCreateForm ? 'Volver' : 'Nuevo Usuario' }}
+        <div class="title-group">
+            <h3>Gestión de Usuarios</h3>
+            <span class="user-count">{{ filteredUsers.length }} de {{ users.length }} usuarios</span>
+        </div>
+        <button class="btn btn-primary" (click)="showCreateForm = !showCreateForm; isEditing = false; resetForm()"
+            *ngIf="!showCreateForm">
+            <i class="fas fa-plus"></i> Nuevo Usuario
+        </button>
+        <button class="btn btn-secondary" (click)="cancelEdit()" *ngIf="showCreateForm">
+            <i class="fas fa-arrow-left"></i> Volver
         </button>
     </div>
 
-    <!-- Create User Form -->
+    <!-- Toolbar: Search and Filter -->
+    <div class="toolbar card" *ngIf="!showCreateForm">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" [(ngModel)]="searchQuery" placeholder="Buscar por nombre, correo o usuario...">
+        </div>
+        <div class="filter-group">
+            <label>Filtrar por Rol:</label>
+            <select [(ngModel)]="roleFilter">
+                <option value="all">Todos los Roles</option>
+                <option value="administrador">Administradores</option>
+                <option value="director">Directores</option>
+                <option value="usuario">Usuarios</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Create/Edit User Form -->
     <div class="create-form card slide-in-top" *ngIf="showCreateForm">
-        <h4>Registrar Usuario</h4>
+        <h4>{{ isEditing ? 'Editar Usuario: ' + newUsername : 'Registrar Nuevo Usuario' }}</h4>
         <div class="form-grid">
             <div class="form-group">
                 <label>Nombre de Usuario</label>
-                <input type="text" [(ngModel)]="newUsername" placeholder="Ej. juanperez">
+                <input type="text" [(ngModel)]="newUsername" [disabled]="isEditing" placeholder="Ej. juanperez">
+                <small *ngIf="isEditing" class="text-muted">El nombre de usuario no se puede cambiar.</small>
             </div>
             <div class="form-group">
                 <label>Correo Electrónico</label>
-                <input type="email" [(ngModel)]="newEmail" placeholder="juan@geovisor.com">
+                <input type="email" [(ngModel)]="newEmail" [disabled]="isEditing" placeholder="juan@geovisor.com">
+                <small *ngIf="isEditing" class="text-muted">El correo no se puede cambiar.</small>
             </div>
             <div class="form-group">
                 <label>Nombre Completo</label>
@@ -25,12 +50,31 @@
             </div>
             <div class="form-group">
                 <label>Código de Acceso (Password)</label>
-                <input type="password" [(ngModel)]="newPassword" placeholder="********">
+                <input type="password" [(ngModel)]="newPassword"
+                    [placeholder]="isEditing ? 'Dejar en blanco para no cambiar' : '********'">
+            </div>
+            <div class="form-group">
+                <label>Rol del Usuario</label>
+                <select [(ngModel)]="newRole">
+                    <option value="administrador">Administrador (Acceso Total)</option>
+                    <option value="director">Director (Carga y Edición)</option>
+                    <option value="usuario">Usuario (Solo Visualización)</option>
+                </select>
+            </div>
+            <div class="form-group status-toggle" *ngIf="isEditing">
+                <label>Estado de Cuenta</label>
+                <div class="toggle-container" (click)="isActive = !isActive">
+                    <div class="toggle-track" [class.active]="isActive">
+                        <div class="toggle-handle"></div>
+                    </div>
+                    <span>{{ isActive ? 'Activo' : 'Inactivo' }}</span>
+                </div>
             </div>
         </div>
         <div class="form-actions">
+            <button class="btn btn-secondary" (click)="cancelEdit()">Cancelar</button>
             <button class="btn btn-primary" (click)="createUser()" [disabled]="isLoading">
-                {{ isLoading ? 'Registrando...' : 'Crear Usuario' }}
+                {{ isLoading ? 'Procesando...' : (isEditing ? 'Guardar Cambios' : 'Crear Usuario') }}
             </button>
         </div>
     </div>
@@ -38,42 +82,71 @@
     <div class="manager-layout" *ngIf="!showCreateForm">
         <!-- Users List -->
         <div class="users-section card">
-            <h4>Usuarios del Sistema</h4>
             <div class="user-list">
-                <div class="user-item" *ngFor="let user of users">
-                    <div class="user-avatar">
+                <div class="user-item" *ngFor="let user of filteredUsers" [class.inactive]="!user.is_active">
+                    <div class="user-avatar" [class.inactive]="!user.is_active">
                         {{ user.username.substring(0, 1).toUpperCase() }}
                     </div>
-                    <div class="user-info">
-                        <strong>{{ user.full_name || user.username }}</strong>
+                    <div class="user-body">
+                        <div class="name-row">
+                            <strong>{{ user.full_name || user.username }}</strong>
+                            <span class="role-badge" [class]="user.role || 'usuario'">{{ user.role || 'usuario'
+                                }}</span>
+                            <span *ngIf="!user.is_active" class="status-badge">Inactivo</span>
+                        </div>
                         <span class="user-email">{{ user.email }}</span>
                     </div>
                     <div class="user-actions">
-                        <button class="btn btn-icon" (click)="selectedUserId = user.id"
-                            [class.active]="selectedUserId === user.id" title="Seleccionar para asignar">
-                            <i class="fas fa-hand-pointer"></i>
+                        <!-- Toggle Status Quick Action -->
+                        <button class="btn btn-icon" (click)="toggleUserStatus(user)"
+                            [title]="user.is_active ? 'Desactivar Usuario' : 'Activar Usuario'">
+                            <i class="fas" [class.fa-toggle-on]="user.is_active" [class.fa-toggle-off]="!user.is_active"
+                                [class.text-success]="user.is_active"></i>
                         </button>
-                        <button class="btn btn-icon text-danger" (click)="deleteUser(user)" title="Eliminar Usuario">
+
+                        <!-- Edit Button -->
+                        <button class="btn btn-icon" (click)="editUser(user)" title="Editar Información">
+                            <i class="fas fa-edit"></i>
+                        </button>
+
+                        <!-- Selection for assignment -->
+                        <button class="btn btn-icon" (click)="selectedUserId = user.id"
+                            [class.active]="selectedUserId === user.id" title="Seleccionar para asignar proyectos">
+                            <i class="fas fa-project-diagram"></i>
+                        </button>
+
+                        <!-- Delete Button -->
+                        <button class="btn btn-icon text-danger" (click)="deleteUser(user)"
+                            title="Eliminar Permanentemente">
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
+                </div>
+
+                <div *ngIf="filteredUsers.length === 0" class="no-results">
+                    <i class="fas fa-user-slash"></i>
+                    <p>No se encontraron usuarios con esos filtros.</p>
                 </div>
             </div>
         </div>
 
         <!-- Assignment Section -->
         <div class="assignment-section card fade-in" *ngIf="selectedUserId">
-            <h4>Asignar Proyecto</h4>
-            <p class="text-muted">Asignar proyecto al usuario ID: {{ selectedUserId }}</p>
+            <div class="panel-header">
+                <h4>Asignar Proyecto</h4>
+                <button class="btn-close" (click)="selectedUserId = null"><i class="fas fa-times"></i></button>
+            </div>
+            <p class="text-muted">Seleccione un proyecto para asignar al usuario seleccionado.</p>
             <div class="form-group">
-                <label>Seleccionar Proyecto</label>
+                <label>Proyecto</label>
                 <select [(ngModel)]="selectedProjectId">
                     <option [ngValue]="null">Elegir proyecto...</option>
                     <option *ngFor="let p of projects" [ngValue]="p.id">{{ p.name }}</option>
                 </select>
             </div>
-            <button class="btn btn-primary full-width" (click)="assignProject()" [disabled]="!selectedProjectId">
-                Confirmar Asignación
+            <button class="btn btn-primary full-width" (click)="assignProject()"
+                [disabled]="!selectedProjectId || isLoading">
+                <i class="fas fa-link"></i> {{ isLoading ? 'Asignando...' : 'Confirmar Asignación' }}
             </button>
         </div>
     </div>

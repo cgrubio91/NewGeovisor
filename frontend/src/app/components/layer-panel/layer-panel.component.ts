@@ -5,6 +5,7 @@ import { Subscription } from 'rxjs';
 import { LayerService, Layer } from '../../services/layer.service';
 import { ProjectContextService } from '../../services/project-context.service';
 import { BaseMapService, BaseMapOption } from '../../services/basemap.service';
+import { AuthService } from '../../services/auth.service';
 
 interface LayerTreeNode {
   type: 'folder' | 'layer';
@@ -60,6 +61,7 @@ interface LayerTreeNode {
                   [checked]="layer.visible"
                   (change)="toggleLayerVisibility(layer.id)"
                   class="layer-checkbox"
+                  [disabled]="!isAdminOrDirector"
                 />
 
                 <!-- Nombre de la capa -->
@@ -78,6 +80,7 @@ interface LayerTreeNode {
                     <i class="icon-zoom"></i>
                   </button>
                   <button 
+                    *ngIf="isAdminOrDirector"
                     class="btn-icon-sm" 
                     (click)="deleteLayer(layer.id)"
                     title="Eliminar capa"
@@ -97,6 +100,7 @@ interface LayerTreeNode {
                   [value]="layer.opacity"
                   (input)="onOpacityChange(layer.id, $event)"
                   class="opacity-slider"
+                  [disabled]="!isAdminOrDirector"
                 />
               </div>
 
@@ -314,7 +318,13 @@ export class LayerPanelComponent implements OnInit, OnDestroy {
   private layerService = inject(LayerService);
   private projectContext = inject(ProjectContextService);
   private baseMapService = inject(BaseMapService);
+  private authService = inject(AuthService);
   private cdr = inject(ChangeDetectorRef);
+
+  get isAdminOrDirector(): boolean {
+    const role = this.authService.currentUser()?.role;
+    return role === 'administrador' || role === 'director';
+  }
 
   ngOnInit(): void {
     // Cargar mapas base disponibles
