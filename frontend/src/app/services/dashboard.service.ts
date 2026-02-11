@@ -21,4 +21,7 @@ export class DashboardService {
     getStats(): Observable<DashboardStats> {
         return this.http.get<DashboardStats>(`${this.baseUrl}/dashboard/stats`);
     }
+    getProcessingStatus(): Observable<any[]> {
+        return this.http.get<any[]>(`${this.baseUrl}/dashboard/processing-status`);
+    }
 }

@@ -120,6 +120,7 @@ desktop.ini
 .pytest_cache/
 .coverage
 htmlcov/
+tile_cache/
 
 # ========================================
 # DOCKER

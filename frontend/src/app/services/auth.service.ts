@@ -7,7 +7,9 @@ import { User } from '../models/models';
     providedIn: 'root'
 })
 export class AuthService {
-    private baseUrl = 'http://localhost:8000';
+    private baseUrl = window.location.origin.includes('localhost')
+        ? 'http://localhost:8000'
+        : window.location.origin + '/api';
     public currentUser = signal<User | null>(null);
 
     constructor(private http: HttpClient) {

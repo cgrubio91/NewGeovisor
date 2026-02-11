@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api.service';
@@ -8,6 +8,7 @@ import { ProjectContextService } from '../../services/project-context.service';
 import { ProjectService } from '../../services/project.service';
 import { AuthService } from '../../services/auth.service';
 import { finalize } from 'rxjs/operators';
+import { HttpEventType } from '@angular/common/http';
 
 /**
  * Componente para la carga de archivos geoespaciales
@@ -95,7 +96,7 @@ import { finalize } from 'rxjs/operators';
               <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
               <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
             </svg>
-            <span>Cargando...</span>
+            <span>Subiendo byte a byte... {{ uploadProgress }}%</span>
           } @else {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -299,10 +300,11 @@ import { finalize } from 'rxjs/operators';
 export class UploadComponent {
   selectedFiles: File[] = [];
   uploading = false;
+  uploadProgress = 0;
   isCollapsed = false;
 
   get canUpload(): boolean {
-    const role = this.authService.currentUser()?.role;
+    const role = this.authService.currentUser()?.role?.toLowerCase();
     return role === 'administrador' || role === 'director';
   }
 
@@ -318,7 +320,8 @@ export class UploadComponent {
     private projectContext: ProjectContextService,
     private projectService: ProjectService,
     private toastService: ToastService,
-    private authService: AuthService
+    private authService: AuthService,
+    private cdr: ChangeDetectorRef
   ) {
     this.projectContext.activeProject$.subscribe(project => {
       this.folders = project?.folders || [];
@@ -370,21 +373,32 @@ export class UploadComponent {
     }
 
     this.uploading = true;
+    this.uploadProgress = 0;
     const folderId = this.selectedFolderId > 0 ? this.selectedFolderId : undefined;
 
     this.apiService.uploadFiles(this.selectedFiles, projectId, folderId)
-      .pipe(finalize(() => this.uploading = false))
+      .pipe(finalize(() => {
+        this.uploading = false;
+        this.uploadProgress = 0;
+        this.cdr.detectChanges();
+      }))
       .subscribe({
-        next: (res: any) => {
-          this.toastService.show(`${res.uploaded?.length} archivo(s) cargado(s) exitosamente`, 'success');
+        next: (event: any) => {
+          if (event.type === HttpEventType.UploadProgress) {
+            this.uploadProgress = Math.round(100 * event.loaded / (event.total || 1));
+            this.cdr.detectChanges();
+          } else if (event.type === HttpEventType.Response) {
+            const res = event.body;
+            this.toastService.show(`${res.uploaded?.length} archivo(s) cargado(s) exitosamente`, 'success');
 
-          // Recargar el proyecto activo para obtener todas las capas (nuevas y persistentes)
-          this.projectService.getProjectById(projectId).subscribe(project => {
-            this.projectContext.setActiveProject(project);
-          });
+            // Recargar el proyecto activo para obtener todas las capas (nuevas y persistentes)
+            this.projectService.getProjectById(projectId).subscribe(project => {
+              this.projectContext.setActiveProject(project);
+            });
 
-          this.selectedFiles = [];
-          this.selectedFolderId = 0;
+            this.selectedFiles = [];
+            this.selectedFolderId = 0;
+          }
         },
         error: (err) => {
           console.error('Error uploading files', err);

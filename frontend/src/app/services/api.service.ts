@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { HttpClient, HttpRequest, HttpEvent, HttpEventType } from '@angular/common/http';
+import { Observable, map } from 'rxjs';
 
 /**
  * Servicio para comunicación con el backend
@@ -15,8 +15,8 @@ export class ApiService {
      * se sirven desde el mismo dominio/proxy, o una URL absoluta de API.
      * Para Docker/Nginx, usaremos una ruta que el proxy pueda redirigir.
      */
-    public baseUrl = window.location.origin.includes('localhost') 
-        ? 'http://localhost:8000' 
+    public baseUrl = window.location.origin.includes('localhost')
+        ? 'http://localhost:8000'
         : window.location.origin + '/api';
 
     getApiUrl(): string {
@@ -26,9 +26,9 @@ export class ApiService {
     constructor(private http: HttpClient) { }
 
     /**
-     * Carga archivos al servidor asociados a un proyecto
+     * Carga archivos al servidor asociados a un proyecto con seguimiento de progreso
      */
-    uploadFiles(files: File[], projectId: number, folderId?: number): Observable<any> {
+    uploadFiles(files: File[], projectId: number, folderId?: number): Observable<HttpEvent<any>> {
         const formData = new FormData();
         files.forEach(file => {
             formData.append('files', file, file.name);
@@ -37,7 +37,13 @@ export class ApiService {
         if (folderId) {
             formData.append('folder_id', folderId.toString());
         }
-        return this.http.post(`${this.baseUrl}/upload`, formData);
+
+        const req = new HttpRequest('POST', `${this.baseUrl}/upload`, formData, {
+            reportProgress: true,
+            responseType: 'json'
+        });
+
+        return this.http.request(req);
     }
 
     /**

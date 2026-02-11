@@ -46,6 +46,8 @@ class LayerBase(BaseModel):
     opacity: Optional[int] = 100  # 0-100
     z_index: Optional[int] = 0
     settings: Optional[dict] = {}
+    processing_status: Optional[str] = "completed"
+    processing_progress: Optional[int] = 100
     
 class LayerCreate(LayerBase):
     project_id: int

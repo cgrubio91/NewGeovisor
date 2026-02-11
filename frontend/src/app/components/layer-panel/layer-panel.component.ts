@@ -15,6 +15,8 @@ interface LayerTreeNode {
   opacity?: number;
   children?: LayerTreeNode[];
   layer?: Layer;
+  processing_status?: 'pending' | 'processing' | 'completed' | 'failed';
+  processing_progress?: number;
 }
 
 @Component({
@@ -68,6 +70,12 @@ interface LayerTreeNode {
                 <span class="layer-name" [title]="layer.name">
                   <i class="icon-{{ getLayerIcon(layer.layer_type) }}"></i>
                   {{ layer.name }}
+                  <span *ngIf="layer.processing_status === 'processing'" class="processing-badge">
+                    Procesando {{ layer.processing_progress }}%
+                  </span>
+                  <span *ngIf="layer.processing_status === 'failed'" class="error-badge">
+                    Error
+                  </span>
                 </span>
 
                 <!-- Botones de acción -->
@@ -102,6 +110,13 @@ interface LayerTreeNode {
                   class="opacity-slider"
                   [disabled]="!isAdminOrDirector"
                 />
+              </div>
+
+              <!-- Barra de progreso -->
+              <div class="processing-bar" *ngIf="layer.processing_status === 'processing' || layer.processing_status === 'pending'">
+                <div class="progress-track">
+                  <div class="progress-fill" [style.width]="(layer.processing_progress || 0) + '%'"></div>
+                </div>
               </div>
 
               <!-- Información de la capa -->
@@ -303,6 +318,37 @@ interface LayerTreeNode {
       background: #667eea;
       color: white;
     }
+
+    .progress-track {
+      height: 4px;
+      background: #e0e0e0;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .processing-bar {
+       padding: 0 4px;
+       margin-bottom: 8px;
+    }
+
+    .processing-badge {
+       display: inline-block;
+       font-size: 10px;
+       padding: 2px 6px;
+       border-radius: 10px;
+       background: rgba(0, 193, 210, 0.1);
+       color: #00c1d2;
+       margin-left: 8px;
+       border: 1px solid rgba(0, 193, 210, 0.2);
+       font-weight: 600;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00c1d2, #00e676);
+      transition: width 0.3s ease;
+    }
   `]
 })
 export class LayerPanelComponent implements OnInit, OnDestroy {
@@ -312,6 +358,7 @@ export class LayerPanelComponent implements OnInit, OnDestroy {
   panelExpanded: boolean = true;
   allExpanded: boolean = false;
   expandedLayers = new Set<number>();
+  private pollInterval: any;
 
   private subscriptions: Subscription[] = [];
 
@@ -335,21 +382,50 @@ export class LayerPanelComponent implements OnInit, OnDestroy {
     this.subscriptions.push(
       this.layerService.layers$.subscribe(layers => {
         this.layers = layers;
+        this.checkProcessingStatus();
         this.cdr.detectChanges();
       })
     );
 
     // Cargar capas del proyecto actual
-    const projectId = this.projectContext.getActiveProjectId();
-    if (projectId) {
-      this.layerService.getProjectLayers(projectId).subscribe(() => {
-        this.cdr.detectChanges();
-      });
+    const project = this.projectContext.getActiveProject();
+    if (project) {
+      this.layerService.getProjectLayers(project.id).subscribe();
     }
+
+    // Iniciar polling
+    this.startPolling();
   }
 
   ngOnDestroy(): void {
+    this.stopPolling();
     this.subscriptions.forEach(sub => sub.unsubscribe());
+  }
+
+  startPolling() {
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    this.pollInterval = setInterval(() => {
+      const project = this.projectContext.getActiveProject();
+      if (project && this.hasProcessingLayers()) {
+        this.layerService.getProjectLayers(project.id).subscribe();
+      }
+    }, 3000);
+  }
+
+  stopPolling() {
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+  }
+
+  hasProcessingLayers(): boolean {
+    return this.layers.some(l => (l as any).processing_status === 'processing' || (l as any).processing_status === 'pending');
+  }
+
+  checkProcessingStatus() {
+    // Si ya no hay capas procesando, podríamos detener el polling o bajar la frecuencia
+    // Pero por simplicidad mantenemos el polling si hay capas pendiente
   }
 
   togglePanel(): void {

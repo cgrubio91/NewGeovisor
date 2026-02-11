@@ -68,7 +68,8 @@ export class MapService {
             ],
             view: new View({
                 center: fromLonLat([-74.006, 4.711]), // Centro por defecto: Bogotá, Colombia
-                zoom: 12
+                zoom: 12,
+                maxZoom: 24  // Allow high zoom for detailed orthophotos
             })
         });
         this.updateLayerList();
@@ -101,7 +102,8 @@ export class MapService {
         const layer = new TileLayer({
             source: new XYZ({
                 url: url,
-                crossOrigin: 'anonymous'
+                crossOrigin: 'anonymous',
+                maxZoom: 24
             }),
             extent: transformedExtent,
             properties: {
@@ -529,7 +531,7 @@ export class MapService {
 
                 this.map.getView().fit(fitExtent, {
                     padding: [50, 50, 50, 50],
-                    maxZoom: 18,
+                    maxZoom: 22,
                     duration: 1000
                 });
             } catch (e) {

@@ -16,7 +16,8 @@ try:
 except Exception:
     pass
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends, status
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends, status, BackgroundTasks
+from convert_cogs import convert_to_cog
 from fastapi.responses import Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -37,6 +38,12 @@ logger = logging.getLogger(__name__)
 
 # Importaciones locales
 import crud, models, schemas
+import warnings
+from rasterio.errors import NodataShadowWarning
+
+# Suppress specific rasterio warning
+warnings.filterwarnings("ignore", category=NodataShadowWarning)
+
 from database import engine, get_db, settings
 from gis_service import gis_service
 
@@ -68,11 +75,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Directorio para archivos cargados
-UPLOAD_DIR = "uploads"
-if not os.path.exists(UPLOAD_DIR):
-    os.makedirs(UPLOAD_DIR)
+from shared import UPLOAD_DIR, tile_cache
 
+# Mount static files using shared UPLOAD_DIR
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 # --- AUTH UTILS ---
@@ -297,12 +302,28 @@ def delete_folder(folder_id: int, db: Session = Depends(get_db), current_user: m
     crud.delete_folder(db, folder_id)
     return {"message": "Folder deleted successfully", "id": folder_id}
 
+from cache_seeder import seed_cache_for_layer
+
+def process_raster_pipeline(file_path: str, layer_id: int):
+    """
+    Combined pipeline:
+    1. Convert to COG
+    2. Seed disk cache
+    """
+    # 1. Optimize
+    success = convert_to_cog(file_path, layer_id)
+    
+    if success:
+        # 2. Seed (warm up) cache for common zoom levels
+        seed_cache_for_layer(file_path, layer_id)
+
 # --- UPLOAD ENDPOINT ---
 @app.post("/upload")
 async def upload_files(
     files: List[UploadFile] = File(...), 
     project_id: int = Form(...),
     folder_id: Optional[int] = Form(None),
+    background_tasks: BackgroundTasks = None, ### Add optional to avoid required arg issues if not provided by client? No, FastAPI injects it.
     db: Session = Depends(get_db),
     current_user: models.User = Depends(check_role(['administrador', 'director']))
 ):
@@ -428,9 +449,15 @@ async def upload_files(
                 visible=True,
                 opacity=100,
                 z_index=0,
-                settings=metadata
+                settings=metadata,
+                processing_status="pending" if layer_type == 'raster' else "completed",
+                processing_progress=0 if layer_type == 'raster' else 100
             )
-            crud.create_layer(db=db, layer=layer_in)
+            created_layer = crud.create_layer(db=db, layer=layer_in)
+            
+            # Start background optimization for rasters
+            if layer_type == 'raster' and background_tasks:
+                background_tasks.add_task(process_raster_pipeline, file_path, created_layer.id)
             
         except Exception as e:
             print(f"Error processing file {filename}: {e}")
@@ -532,88 +559,61 @@ def set_layer_opacity(
     db.commit()
     return {"layer_id": layer_id, "opacity": opacity}
 
-# --- TILING SERVICE ---
+
+# --- TILING SERVICE (High-Performance VRT-based) ---
+from tile_renderer import tile_renderer, EMPTY_TILE_BYTES, EMPTY_TILE_PNG
+
 @app.get("/tiles/{filename}/{z}/{x}/{y}.png")
 async def get_tile(filename: str, z: int, x: int, y: int):
+    """
+    High-performance tile endpoint.
+    Uses WarpedVRT + COG overviews for instant tile reads.
+    Output format: WEBP (smaller than PNG, faster to transfer).
+    Falls back to cached PNG tiles from older cache if present.
+    """
+    # 1. Check disk cache first
+    cache_key = f"{filename}-{z}-{x}-{y}"
+    cached_tile = tile_cache.get(cache_key)
+    if cached_tile:
+        # Detect format from cached data (old cache may have PNG)
+        if cached_tile[:4] == b'RIFF':
+            media = "image/webp"
+        else:
+            media = "image/png"
+        return Response(
+            content=cached_tile, 
+            media_type=media, 
+            headers={"Cache-Control": "public, max-age=31536000"}
+        )
+
+    # 2. Locate the raster file
     file_path = os.path.join(UPLOAD_DIR, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     
+    # 3. Render the tile using VRT (reads from COG overviews automatically)
     try:
-        with rasterio.env.Env(PROJ_LIB=os.environ.get('PROJ_LIB')):
-            with rasterio.open(file_path) as src:
-                from rasterio.warp import reproject, Resampling
-                from rasterio.transform import from_bounds
-                
-                # Coordenadas del tile en EPSG:3857
-                size = 20037508.34 * 2
-                res = size / (2**z)
-                left = -20037508.34 + x * res
-                top = 20037508.34 - y * res
-                right = left + res
-                bottom = top - res
-                
-                # 1. Definir transformación destino (el tile de 256x256)
-                dst_transform = from_bounds(left, bottom, right, top, 256, 256)
-                dst_crs = 'EPSG:3857'
-                
-                # 2. Preparar arrays destino
-                data = np.zeros((src.count, 256, 256), dtype=src.dtypes[0])
-                # Máscara para transparencia
-                mask = np.zeros((256, 256), dtype=np.uint8)
-                
-                # 3. Reproyectar datos
-                reproject(
-                    source=rasterio.band(src, list(range(1, src.count + 1))),
-                    destination=data,
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=dst_transform,
-                    dst_crs=dst_crs,
-                    resampling=Resampling.bilinear
-                )
-                
-                # 4. Reproyectar máscara original del archivo (para transparencia perfecta)
-                reproject(
-                    source=src.read_masks(1),
-                    destination=mask,
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=dst_transform,
-                    dst_crs=dst_crs,
-                    resampling=Resampling.nearest
-                )
-                
-                data = np.nan_to_num(data)
-                
-                # Normalización simple pero efectiva
-                if data.dtype != np.uint8:
-                    d_min, d_max = data.min(), data.max()
-                    if d_max > d_min:
-                        data = ((data - d_min) / (d_max - d_min) * 255).astype(np.uint8)
-                    else:
-                        data = data.astype(np.uint8)
-                
-                # Crear imagen PIL
-                if src.count >= 3:
-                    img_data = np.transpose(data[:3], (1, 2, 0))
-                    img = Image.fromarray(img_data, mode='RGB')
-                else:
-                    img = Image.fromarray(data[0], mode='L')
-                
-                # Aplicar la máscara de transparencia
-                img.putalpha(Image.fromarray(mask, mode='L'))
-                
-                buf = io.BytesIO()
-                img.save(buf, format="PNG")
-                return Response(content=buf.getvalue(), media_type="image/png")
-                
+        tile_bytes = tile_renderer.render_tile(file_path, z, x, y)
     except Exception as e:
-        print(f"Error generando tile para {filename}: {e}")
-        img = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        return Response(content=buf.getvalue(), media_type="image/png")
+        logger.error(f"Tile render error {filename}/{z}/{x}/{y}: {e}")
+        tile_bytes = None
+    
+    if tile_bytes is None:
+        # Empty/out-of-bounds tile — return transparent, don't cache
+        return Response(
+            content=EMPTY_TILE_BYTES,
+            media_type="image/webp",
+            headers={"Cache-Control": "public, max-age=86400"}
+        )
+    
+    # 4. Cache the rendered tile for 30 days
+    tile_cache.set(cache_key, tile_bytes, expire=86400 * 30)
+    
+    return Response(
+        content=tile_bytes,
+        media_type="image/webp",
+        headers={"Cache-Control": "public, max-age=31536000"}
+    )
 
 @app.get("/files/{filename:path}")
 async def get_file(filename: str):
@@ -622,8 +622,33 @@ async def get_file(filename: str):
         raise HTTPException(status_code=404, detail="Archivo no encontrado")
     return FileResponse(file_path)
 
+@app.get("/dashboard/processing-status")
+def get_processing_status(db: Session = Depends(get_db)):
+    """
+    Returns list of layers currently being processed (pending or processing)
+    """
+    layers = db.query(models.Layer).filter(
+        models.Layer.processing_status.in_(['pending', 'processing', 'processing_overviews'])
+    ).all()
+    
+    return [
+        {
+            "id": l.id,
+            "name": l.name,
+            "status": l.processing_status,
+            "progress": l.processing_progress,
+            "project_id": l.project_id
+        }
+        for l in layers
+    ]
+
 if __name__ == "__main__":
     import uvicorn
-    # En producción, esto se manejará vía Gunicorn/Docker
-    # Activamos reload=True para desarrollo
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # Desactivamos reload para evitar reinicios constantes durante el procesamiento de tiles/uploads
+    # que interrumpen la experiencia del usuario y el login.
+    uvicorn.run(
+        "main:app", 
+        host="0.0.0.0", 
+        port=8000, 
+        reload=False
+    )

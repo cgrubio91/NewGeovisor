@@ -19,6 +19,8 @@ export interface Layer {
   folder_id?: number;
   created_at: string;
   updated_at?: string;
+  processing_status?: 'pending' | 'processing' | 'completed' | 'failed' | 'processing_overviews';
+  processing_progress?: number;
 }
 
 export interface LayerUpdate {

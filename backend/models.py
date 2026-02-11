@@ -101,6 +101,12 @@ class Layer(Base):
     # Puede incluir: estilo, filtros, configuraciones específicas del formato, etc.
     settings = Column(JSON, nullable=True, default={}) 
     
+    # Estado de procesamiento para ortofotos
+    # pending, processing, completed, failed
+    processing_status = Column(String, default="completed", nullable=True)
+    # Porcentaje 0-100
+    processing_progress = Column(Integer, default=100, nullable=True)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
