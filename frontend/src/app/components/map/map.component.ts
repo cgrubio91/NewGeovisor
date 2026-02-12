@@ -1,8 +1,9 @@
-import { Component, OnInit, AfterViewInit } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, inject } from '@angular/core';
 import { ProjectContextService } from '../../services/project-context.service';
 import { ApiService } from '../../services/api.service';
 import { Project } from '../../models/models';
 import { MapService } from '../../services/map.service';
+import { LayerService } from '../../services/layer.service';
 
 /**
  * Componente del mapa principal
@@ -21,6 +22,9 @@ import { MapService } from '../../services/map.service';
   `]
 })
 export class MapComponent implements OnInit, AfterViewInit {
+  private layerService = inject(LayerService);
+  private subscriptions: any[] = [];
+
   constructor(
     private mapService: MapService,
     private projectContext: ProjectContextService,
@@ -32,19 +36,19 @@ export class MapComponent implements OnInit, AfterViewInit {
   ngAfterViewInit(): void {
     this.mapService.initMap('map');
 
-    // Sincronizar capas del proyecto activo
-    this.projectContext.activeProject$.subscribe(project => {
-      if (project) {
-        this.loadProjectLayers(project);
-      }
-    });
+    // Sincronizar capas desde el Proyecto Activo (Fuente de verdad única)
+    this.subscriptions.push(
+      this.projectContext.activeProject$.subscribe(project => {
+        if (project) {
+          this.loadLayers(project.layers || []);
+        }
+      })
+    );
   }
 
-  private loadProjectLayers(project: Project) {
+  private loadLayers(layers: any[]) {
     this.mapService.clearLayers();
-    if (!project.layers) return;
-
-    project.layers.forEach(layer => {
+    layers.forEach(layer => {
       // El backend devuelve 'settings', pero el frontend a veces usaba 'metadata'.
       // Usamos settings como fuente principal.
       const metadata = layer.settings || layer.metadata;
@@ -107,5 +111,8 @@ export class MapComponent implements OnInit, AfterViewInit {
         this.mapService.addKmlLayer(layer.name, kmlUrl, layer.id, layer.folder_id);
       }
     });
+  }
+  ngOnDestroy(): void {
+    this.subscriptions.forEach(s => s.unsubscribe());
   }
 }

@@ -100,15 +100,17 @@ export class Map3dService {
             (tileset as any)._id = id; // Guardar ID
             (tileset as any)._type = 'tileset';
 
-            // Si es una nube de puntos, aplicar estilo para mejorar visibilidad
+            // Estilo visual mejorado para nubes de puntos
             tileset.pointCloudShading.attenuation = true;
-            tileset.pointCloudShading.maximumAttenuation = 8.0;
+            tileset.pointCloudShading.maximumAttenuation = 5.0; // Reducido un poco para mayor nitidez
             tileset.pointCloudShading.geometricErrorScale = 1.0;
-            tileset.pointCloudShading.eyeDomeLighting = true; // Muy importante para nubes de puntos sin normales
+            tileset.pointCloudShading.eyeDomeLighting = true;
+            tileset.pointCloudShading.eyeDomeLightingStrength = 1.0;
+            tileset.pointCloudShading.eyeDomeLightingRadius = 2.0;
 
-            // Estilo por defecto tipo Google Earth
+            // Mantener tamaño de punto equilibrado
             tileset.style = new Cesium.Cesium3DTileStyle({
-                pointSize: 5.0
+                pointSize: 4.0
             });
 
             this.viewer.zoomTo(tileset);
@@ -325,8 +327,22 @@ export class Map3dService {
         // Limpiar fuentes de datos (KML, GeoJSON, etc)
         this.viewer.dataSources.removeAll();
 
-        // Limpiar primitivas (Tilesets 3D)
-        this.viewer.scene.primitives.removeAll();
+        // Limpiar primitivas (Tilesets 3D) pero PRESERVAR rejilla y ejes
+        const primitives = this.viewer.scene.primitives;
+        const toRemove: any[] = [];
+
+        for (let i = 0; i < primitives.length; i++) {
+            const p = primitives.get(i);
+            // No borrar si es parte de la rejilla o los ejes
+            const isGrid = p === this.gridPrimitive || (Array.isArray(this.gridPrimitive) && this.gridPrimitive.includes(p));
+            const isAxes = p === this.axesPrimitive;
+
+            if (!isGrid && !isAxes) {
+                toRemove.push(p);
+            }
+        }
+
+        toRemove.forEach(p => primitives.remove(p));
 
         // Limpiar capas de imágenes adicionales (excepto la base)
         const layers = this.viewer.imageryLayers;

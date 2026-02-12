@@ -327,55 +327,96 @@ def process_3d_pipeline(file_path: str, layer_id: int):
     """
     db = SessionLocal()
     print(f"DEBUG 3D: Starting pipeline for layer_id={layer_id}, file={file_path}")
+    
     try:
         layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
         if not layer:
             print(f"DEBUG 3D: Layer {layer_id} not found in DB")
             return
 
+        # Verificar que el archivo existe
+        if not os.path.exists(file_path):
+            print(f"DEBUG 3D: ERROR - File not found: {file_path}")
+            layer.processing_status = "failed"
+            layer.processing_progress = 0
+            db.commit()
+            return
+
         ext = os.path.splitext(file_path)[1].lower()
         print(f"DEBUG 3D: Extension detected: {ext}")
+        
+        # Mostrar tamaño del archivo
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        print(f"DEBUG 3D: File size: {file_size_mb:.2f} MB")
+        
+        success = False
         new_path = None
         
         if ext in ['.las', '.laz']:
-            # ... (no changes here but I need to keep the structure)
             output_dir = os.path.join(os.path.dirname(file_path), f"3d_tiles_{layer_id}")
             print(f"DEBUG 3D: Converting Point Cloud to {output_dir}")
+            print(f"DEBUG 3D: This may take several minutes for large files...")
+            
             success, result = convert_point_cloud(file_path, output_dir)
             
             if success:
                 new_path = result
                 print(f"DEBUG 3D: Point Cloud SUCCESS. New path: {new_path}")
+            else:
+                print(f"DEBUG 3D: Point Cloud FAILED. Error: {result}")
                 
         elif ext == '.obj':
             output_path = os.path.splitext(file_path)[0] + ".glb"
             print(f"DEBUG 3D: Converting OBJ to {output_path}")
+            
             success, result = convert_obj_to_glb(file_path, output_path)
             
             if success:
                 new_path = result
                 print(f"DEBUG 3D: OBJ SUCCESS. New path: {new_path}")
+            else:
+                print(f"DEBUG 3D: OBJ FAILED. Error: {result}")
 
-        if new_path:
-            print(f"DEBUG 3D: Updating DB for layer {layer_id}")
-            layer.file_path = new_path
+        if success and new_path and os.path.exists(new_path):
+            print(f"DEBUG 3D: Updating DB for layer {layer_id}. Path: {new_path}")
+            normalized_path = os.path.normpath(new_path)
+            
+            # Asegurar que guardamos la ruta relativa a la carpeta de uploads para el frontend
+            # Si new_path es absoluta, la convertimos a relativa a UPLOAD_DIR
+            if os.path.isabs(normalized_path):
+                rel_path = os.path.relpath(normalized_path, start=os.getcwd())
+                layer.file_path = rel_path
+            else:
+                layer.file_path = normalized_path
+
             layer.processing_status = "completed"
             layer.processing_progress = 100
-            layer.metadata = {**(layer.metadata or {}), "optimized": True, "original_path": file_path}
+            
+            current_settings = layer.settings or {}
+            layer.settings = {
+                **current_settings, 
+                "optimized": True, 
+                "original_path": file_path
+            }
+            
             db.commit()
-            print(f"DEBUG 3D: DATABASE UPDATED for layer {layer_id}")
+            print(f"DEBUG 3D: ✅ DATABASE UPDATED for layer {layer_id}. Final Path: {layer.file_path}")
         else:
-            print(f"DEBUG 3D: No new_path generated, marking as failed")
+            error_detail = result if not success else "File not found after conversion"
+            print(f"DEBUG 3D: ❌ Conversion failed for layer {layer_id}. Reason: {error_detail}")
             layer.processing_status = "failed"
+            layer.processing_progress = 0
             db.commit()
             
     except Exception as e:
-        print(f"Error in 3D pipeline: {e}")
+        print(f"DEBUG 3D: ❌ EXCEPTION in pipeline for layer {layer_id}: {e}")
+        import traceback
+        traceback.print_exc()
         try:
-            db.rollback()
             layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
             if layer:
                 layer.processing_status = "failed"
+                layer.processing_progress = 0
                 layer.metadata = {**(layer.metadata or {}), "error": str(e)}
                 db.commit()
         except:
@@ -515,9 +556,9 @@ async def upload_files(
                 visible=True,
                 opacity=100,
                 z_index=0,
-                settings=metadata,
-                processing_status="pending" if layer_type == 'raster' else "completed",
-                processing_progress=0 if layer_type == 'raster' else 100
+                settings={**metadata, "original_path": file_path},
+                processing_status="processing" if layer_type in ['point_cloud', '3d_model'] else ("pending" if layer_type == 'raster' else "completed"),
+                processing_progress=0 if layer_type in ['point_cloud', '3d_model', 'raster'] else 100
             )
             created_layer = crud.create_layer(db=db, layer=layer_in)
             
@@ -763,12 +804,23 @@ async def download_layer_file(layer_id: int, db: Session = Depends(get_db)):
     if not layer:
         raise HTTPException(status_code=404, detail="Layer not found")
     
-    # Priorizar el archivo original si existe en settings/metadata
+    # Priorizar el archivo original si existe en settings
     # (Para nubes de puntos, file_path apunta al tileset.json, pero original_path tiene el .las)
-    settings_data = layer.settings or layer.metadata or {}
+    settings_data = layer.settings or {}
     original_path = settings_data.get("original_path")
     
-    file_path = original_path if original_path and os.path.exists(original_path) else layer.file_path
+    file_path = layer.file_path
+    if original_path:
+        # Verificar si original_path es absoluto o relativo
+        if os.path.isabs(original_path) and os.path.exists(original_path):
+            file_path = original_path
+        else:
+            # Probar relativo a UPLOAD_DIR
+            potential_path = os.path.join(UPLOAD_DIR, os.path.basename(original_path))
+            if os.path.exists(potential_path):
+                file_path = potential_path
+            elif os.path.exists(os.path.abspath(original_path)):
+                file_path = os.path.abspath(original_path)
     
     # Ensure absolute path
     if not os.path.isabs(file_path):

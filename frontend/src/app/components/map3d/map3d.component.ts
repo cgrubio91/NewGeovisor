@@ -1,7 +1,8 @@
-import { Component, OnInit, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, inject } from '@angular/core';
 import { Map3dService } from '../../services/map3d.service';
 import { ProjectContextService } from '../../services/project-context.service';
 import { ApiService } from '../../services/api.service';
+import { LayerService } from '../../services/layer.service';
 import { Project } from '../../models/models';
 
 @Component({
@@ -17,6 +18,9 @@ import { Project } from '../../models/models';
   `]
 })
 export class Map3dComponent implements OnInit, AfterViewInit, OnDestroy {
+  private layerService = inject(LayerService);
+  private subscriptions: any[] = [];
+
   constructor(
     private map3dService: Map3dService,
     private projectContext: ProjectContextService,
@@ -33,35 +37,41 @@ export class Map3dComponent implements OnInit, AfterViewInit, OnDestroy {
       this.map3dService.toggleLocalMode(this.map3dService.localModeEnabled);
     }, 1000);
 
-    // Sincronizar capas del proyecto activo
-    this.projectContext.activeProject$.subscribe(project => {
-      if (project) {
-        this.loadProjectLayers(project);
-      }
-    });
+    // Sincronizar capas desde el Proyecto Activo (Fuente de verdad única)
+    this.subscriptions.push(
+      this.projectContext.activeProject$.subscribe(project => {
+        if (project) {
+          this.loadLayers(project.layers || []);
+        }
+      })
+    );
   }
 
-  private loadProjectLayers(project: Project) {
+  private loadLayers(layers: any[]) {
+    console.log('Map3D: Cargando capas...', layers);
     this.map3dService.clearLayers();
-    if (!project.layers) return;
-
-    project.layers.forEach(layer => {
+    layers.forEach(layer => {
       const metadata = layer.settings || layer.metadata;
+      console.log(`Map3D: Procesando capa "${layer.name}" (${layer.layer_type}). Status: ${layer.processing_status}`);
+
       // Para KML no es estrictamente necesario tener metadata/settings para intentar cargar
       if (!metadata && layer.layer_type !== 'kml') return;
 
       const filePath = layer.file_path || '';
       const normalizedPath = filePath.replace(/\\/g, '/');
-      const uploadsIndex = normalizedPath.indexOf('/uploads/');
+      let relativePath = normalizedPath;
 
-      let fileUrl = '';
-      if (uploadsIndex !== -1) {
-        const relativePath = normalizedPath.substring(uploadsIndex + 8).replace(/^\/+/, ''); // Borrar 'uploads/' o 'uploads\'
-        fileUrl = `${this.apiService.getApiUrl()}/uploads/${relativePath}`;
-      } else {
-        const filename = filePath.split(/[\\/]/).pop();
-        fileUrl = `${this.apiService.getApiUrl()}/uploads/${filename}`;
+      const uploadsMarker = 'uploads/';
+      const idx = normalizedPath.toLowerCase().indexOf(uploadsMarker);
+
+      if (idx !== -1) {
+        relativePath = normalizedPath.substring(idx + uploadsMarker.length);
       }
+
+      // Eliminar barras iniciales sobrantes
+      relativePath = relativePath.replace(/^\/+/, '');
+
+      const fileUrl = `${this.apiService.getApiUrl()}/uploads/${relativePath}`;
 
       if (layer.layer_type === 'raster') {
         const filename = filePath.split(/[\\/]/).pop() || '';
@@ -84,15 +94,26 @@ export class Map3dComponent implements OnInit, AfterViewInit, OnDestroy {
 
         this.map3dService.addRasterLayer(layer.name, tileUrl, extent, layer.id);
       } else if (layer.layer_type === 'point_cloud') {
-        const isConverted = filePath.toLowerCase().endsWith('tileset.json') || filePath.toLowerCase().endsWith('.json');
+        const filename = filePath.split(/[\\/]/).pop()?.toLowerCase() || '';
+        const isConverted = filename === 'tileset.json' || filename.endsWith('.json');
+
         if (isConverted) {
-          this.map3dService.add3DTileset(fileUrl, layer.id, metadata?.rotation);
+          // Pequeño delay de cortesía para asegurar que el sistema de archivos del server soltó el lock
+          setTimeout(() => {
+            this.map3dService.add3DTileset(fileUrl, layer.id, metadata?.rotation);
+          }, 500);
+        } else if (layer.processing_status === 'completed') {
+          // Si está completado pero el path sigue siendo .las, es que el polling no ha traído el nuevo path aún
+          console.log('Map3D: Esperando actualización de ruta para tileset...');
         } else {
-          console.warn('Nube de puntos no convertida: Cesium no puede renderizar .las directamente.', layer.name);
+          console.warn('Nube de puntos en proceso o no convertida:', layer.name, filePath);
         }
       } else if (layer.layer_type === '3d_model') {
+        const filename = filePath.split(/[\\/]/).pop()?.toLowerCase() || '';
+        const isTileset = filename === 'tileset.json' || filename.endsWith('.json');
+
         // Si es tileset (malla de realidad), usar add3DTileset
-        if (filePath.toLowerCase().endsWith('tileset.json')) {
+        if (isTileset) {
           this.map3dService.add3DTileset(fileUrl, layer.id, metadata?.rotation);
         } else {
           // Para modelos GLB/GLTF/OBJ
@@ -106,6 +127,6 @@ export class Map3dComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // Viewer cleanup
+    this.subscriptions.forEach(s => s.unsubscribe());
   }
 }

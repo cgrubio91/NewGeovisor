@@ -428,6 +428,8 @@ export class LayerControlComponent implements OnInit {
   showRenameModal = false;
   tempRenameName = '';
   renamingLayer: any = null;
+  private pollInterval: any;
+  private subs: any[] = [];
 
   private mapService = inject(MapService);
   private map3dService = inject(Map3dService);
@@ -437,19 +439,51 @@ export class LayerControlComponent implements OnInit {
 
   ngOnInit(): void {
     // Sincronizar capas desde el Proyecto Activo (Fuente de verdad única)
-    this.projectContext.activeProject$.subscribe(project => {
-      if (project) {
-        this.layers = (project.layers || []).map(l => ({
-          ...l,
-          // Mantener compatibilidad con la interfaz que espera estas propiedades
-          visible: l.visible !== undefined ? l.visible : true,
-          opacity: l.opacity !== undefined ? l.opacity / 100 : 1,
-          rotation: l.rotation || l.settings?.rotation || { heading: 0, pitch: 0, roll: 0 }
-        }));
-        this.folders = project.folders || [];
-        this.filterItems();
-      }
-    });
+    this.subs.push(
+      this.projectContext.activeProject$.subscribe(project => {
+        if (project) {
+          this.layers = (project.layers || []).map(l => ({
+            ...l,
+            // Mantener compatibilidad con la interfaz que espera estas propiedades
+            visible: l.visible !== undefined ? l.visible : true,
+            opacity: l.opacity !== undefined ? l.opacity / 100 : 1,
+            rotation: l.rotation || l.settings?.rotation || { heading: 0, pitch: 0, roll: 0 }
+          }));
+          this.folders = project.folders || [];
+          this.filterItems();
+
+          // Iniciar polling si hay capas procesando
+          this.checkAndStartPolling();
+        }
+      })
+    );
+  }
+
+  private checkAndStartPolling() {
+    const hasProcessing = this.layers.some(l =>
+      l.processing_status === 'processing' ||
+      l.processing_status === 'pending' ||
+      l.processing_status === 'processing_overviews'
+    );
+
+    if (hasProcessing && !this.pollInterval) {
+      this.pollInterval = setInterval(() => {
+        const projectId = this.projectContext.getActiveProjectId();
+        if (projectId) {
+          this.projectService.getProjectById(projectId).subscribe(project => {
+            this.projectContext.setActiveProject(project);
+          });
+        }
+      }, 4000);
+    } else if (!hasProcessing && this.pollInterval) {
+      clearInterval(this.pollInterval);
+      this.pollInterval = null;
+    }
+  }
+
+  ngOnDestroy() {
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    this.subs.forEach(s => s.unsubscribe());
   }
 
   toggleCollapse() {
