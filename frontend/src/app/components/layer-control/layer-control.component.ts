@@ -20,9 +20,9 @@ import { Layer, Folder } from '../../models/models';
           <polyline points="2 17 12 22 22 17"></polyline>
           <polyline points="2 12 12 17 22 12"></polyline>
         </svg>
-        <h3 *ngIf="!isCollapsed">Capas del Proyecto</h3>
-        <button class="action-btn toggle-btn" (click)="toggleCollapse(); $event.stopPropagation()">
-            <i class="fas" [class.fa-chevron-left]="!isCollapsed" [class.fa-chevron-right]="isCollapsed"></i>
+        <h3 *ngIf="!isCollapsed">Capas</h3>
+        <button class="action-btn toggle-btn" *ngIf="!isCollapsed" (click)="toggleCollapse(); $event.stopPropagation()">
+            <i class="fas fa-chevron-left"></i>
         </button>
         <div class="header-actions" *ngIf="!isCollapsed">
            <button class="action-btn" (click)="showNewFolderInput = !showNewFolderInput; $event.stopPropagation()" title="Nueva Carpeta">
@@ -94,6 +94,18 @@ import { Layer, Folder } from '../../models/models';
           </div>
       </div>
       
+      <!-- Rename Modal -->
+      <div class="modal-overlay" *ngIf="showRenameModal" (click)="closeRenameModal()">
+        <div class="modal-content" (click)="$event.stopPropagation()">
+          <h4>Renombrar Capa</h4>
+          <input type="text" [(ngModel)]="tempRenameName" (keyup.enter)="saveRename()" #renameInput>
+          <div class="modal-actions">
+            <button class="btn-cancel" (click)="closeRenameModal()">Cancelar</button>
+            <button class="btn-save" (click)="saveRename()">Guardar</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Reusable Layer Template -->
       <ng-template #layerItem let-layer>
         <div class="layer-item" [class.active]="layer.visible">
@@ -101,7 +113,7 @@ import { Layer, Folder } from '../../models/models';
             <label class="checkbox-container">
               <input type="checkbox" [checked]="layer.visible" (change)="toggleVisibility(layer.id)">
               <span class="checkmark"></span>
-              <span class="layer-name" [title]="layer.name">{{ layer.name }}</span>
+              <span class="layer-name" [title]="layer.name" (dblclick)="openRenameModal(layer)">{{ layer.name }}</span>
             </label>
             
             <div class="layer-actions">
@@ -118,22 +130,22 @@ import { Layer, Folder } from '../../models/models';
                    <i class="fas fa-ellipsis-v"></i>
                 </button>
                 <div class="dropdown-content">
+                  <a (click)="openRenameModal(layer)">Renombrar</a>
                   <a (click)="moveLayer(layer, undefined)">Mover a Raíz</a>
                   <a *ngFor="let f of folders" (click)="moveLayer(layer, f.id)">Mover a {{f.name}}</a>
                   <hr>
-                  <a (click)="downloadLayer(layer)">Descargar Capa</a>
                   <a class="text-danger" (click)="deleteLayer(layer)">Eliminar Capa</a>
                 </div>
               </div>
-              
-                <button class="action-btn" (click)="downloadLayer(layer); $event.stopPropagation()" title="Descargar">
-                  <i class="fas fa-download"></i>
-                </button>
                 
-                <button class="action-btn" (click)="zoomToLayer(layer); $event.stopPropagation()" title="Zoom">
-                  <i class="fas fa-search-plus"></i>
-                </button>
-              </div>
+              <button class="action-btn" (click)="downloadLayer(layer); $event.stopPropagation()" title="Descargar">
+                <i class="fas fa-download"></i>
+              </button>
+                
+              <button class="action-btn" (click)="zoomToLayer(layer); $event.stopPropagation()" title="Zoom">
+                <i class="fas fa-search-plus"></i>
+              </button>
+            </div>
           </div>
           
           <div class="layer-details" *ngIf="layer.visible">
@@ -148,11 +160,38 @@ import { Layer, Folder } from '../../models/models';
     </div>
   `,
   styles: [`
+    /* Modal Styles */
+    .modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center;
+        backdrop-filter: blur(2px);
+    }
+    .modal-content {
+        background: #1e293b; padding: 20px; border-radius: 12px; width: 300px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid rgba(0, 193, 210, 0.3);
+        display: flex; flex-direction: column; gap: 15px;
+    }
+    .modal-content h4 { margin: 0; color: white; font-size: 1.1rem; text-align: center; }
+    .modal-content input {
+        padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a;
+        color: white; outline: none; transition: border-color 0.2s;
+    }
+    .modal-content input:focus { border-color: #00c1d2; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .modal-actions button {
+        padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; transition: all 0.2s;
+    }
+    .btn-cancel { background: #334155; color: #cbd5e1; }
+    .btn-cancel:hover { background: #475569; color: white; }
+    .btn-save { background: #00c1d2; color: #0f172a; }
+    .btn-save:hover { background: #00e0f3; }
+
+    /* Component Styles */
     .layer-control {
       position: absolute; 
       top: 100px;
       left: 20px;
-      width: 320px;
+      width: 340px;
       max-height: calc(100vh - 140px); 
       z-index: 1000;
       background: rgba(10, 25, 41, 0.95); 
@@ -167,9 +206,32 @@ import { Layer, Folder } from '../../models/models';
     }
     
     .layer-control.collapsed {
-        width: 60px;
-        height: auto;
+        width: 60px !important;
+        min-width: 60px !important;
+        height: 60px !important;
+        min-height: 60px !important;
+        max-height: 60px !important;
         overflow: hidden;
+        padding: 0 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        aspect-ratio: 1 / 1;
+    }
+
+    .layer-control.collapsed .panel-header {
+        justify-content: center;
+        padding: 0;
+        border-bottom: none;
+        width: 100%;
+        height: 100%;
+    }
+
+    .layer-control.collapsed .panel-header svg {
+        width: 32px !important;
+        height: 32px !important;
+        color: var(--color-primary-cyan);
     }
 
     .panel-header { 
@@ -228,8 +290,8 @@ import { Layer, Folder } from '../../models/models';
         gap: 8px;
     }
     .layer-name { 
-        font-size: 0.8rem; 
-        color: #cbd5e1; 
+        font-size: 0.85rem; 
+        color: #ffffff; 
         overflow: hidden; 
         text-overflow: ellipsis; 
         white-space: nowrap; 
@@ -337,6 +399,11 @@ export class LayerControlComponent implements OnInit {
   showNewFolderInput = false;
   isCollapsed = false;
 
+  // Modal State
+  showRenameModal = false;
+  tempRenameName = '';
+  renamingLayer: any = null;
+
   private mapService = inject(MapService);
   private map3dService = inject(Map3dService);
   private projectContext = inject(ProjectContextService);
@@ -344,8 +411,6 @@ export class LayerControlComponent implements OnInit {
   private toastService = inject(ToastService);
 
   ngOnInit(): void {
-    console.log('LayerControlComponent initialized');
-
     // Sincronizar capas desde el MapService
     this.mapService.layersChanged.subscribe(layers => {
       this.layers = layers;
@@ -398,14 +463,13 @@ export class LayerControlComponent implements OnInit {
         }
       },
       error: (err) => {
-        console.error('Error creating folder:', err);
         this.toastService.show('Error al crear carpeta', 'error');
       }
     });
   }
 
   deleteFolder(folder: Folder) {
-    if (!confirm(`¿Eliminar la carpeta "${folder.name}"? Las capas volverán a la raíz.`)) return;
+    if (!confirm(`¿Eliminar la carpeta "${folder.name}"?`)) return;
 
     this.projectService.deleteFolder(folder.id).subscribe({
       next: () => {
@@ -421,7 +485,7 @@ export class LayerControlComponent implements OnInit {
 
   moveLayer(layer: any, folderId?: number) {
     if (typeof layer.id !== 'number') {
-      this.toastService.show('No se puede mover esta capa (capa base o sistema)', 'info');
+      this.toastService.show('No se puede mover esta capa', 'info');
       return;
     }
 
@@ -476,31 +540,18 @@ export class LayerControlComponent implements OnInit {
   }
 
   openCompareTool(id: any) {
-    console.log('LayerControl: Opening compare tool for layer ID:', id);
     this.mapService.openCompareTool(id);
   }
 
   reorderLayer(layer: any, delta: number) {
-    console.log(`LayerControl: Manual reorder request for layer ${layer.id} (name: ${layer.name}, current Z: ${layer.z_index}) with delta: ${delta}`);
-
     const currentZ = layer.z_index || 0;
     const newZ = Math.max(0, currentZ + delta);
 
-    // Actualizar mapa localmente
     this.mapService.setLayerZIndex(layer.id, newZ);
     layer.z_index = newZ;
 
-    // Sincronizar con base de datos si es una capa persistente
     if (typeof layer.id === 'number') {
-      this.projectService.updateLayer(layer.id, { z_index: newZ }).subscribe({
-        next: () => {
-          this.toastService.show(`Orden actualizado: Nivel ${newZ}`, 'info');
-        },
-        error: (err) => {
-          console.error('Error updating layer order:', err);
-          this.toastService.show('Error al actualizar orden', 'error');
-        }
-      });
+      this.projectService.updateLayer(layer.id, { z_index: newZ }).subscribe();
     }
   }
 
@@ -510,16 +561,61 @@ export class LayerControlComponent implements OnInit {
     window.open(url, '_blank');
   }
 
+  // Rename Logic with Modal
+  openRenameModal(layer: any) {
+    if (typeof layer.id !== 'number') return;
+    this.renamingLayer = layer;
+    this.tempRenameName = layer.name;
+    this.showRenameModal = true;
+
+    // Auto focus input
+    setTimeout(() => {
+      const input = document.querySelector('.modal-content input') as HTMLInputElement;
+      if (input) input.focus();
+    }, 100);
+  }
+
+  closeRenameModal() {
+    this.showRenameModal = false;
+    this.renamingLayer = null;
+    this.tempRenameName = '';
+  }
+
+  saveRename() {
+    if (!this.renamingLayer || !this.tempRenameName.trim()) return;
+
+    const layer = this.renamingLayer;
+    const newName = this.tempRenameName.trim();
+    const oldName = layer.name;
+
+    if (newName === oldName) {
+      this.closeRenameModal();
+      return;
+    }
+
+    layer.name = newName; // Optimistic update
+    this.closeRenameModal();
+
+    this.projectService.updateLayer(layer.id, { name: newName }).subscribe({
+      next: () => {
+        this.toastService.show('Capa renombrada', 'success');
+      },
+      error: (err) => {
+        layer.name = oldName; // Revert
+        this.toastService.show('Error al renombrar', 'error');
+        console.error(err);
+      }
+    });
+  }
+
   trackLayer(index: number, item: any) { return item.id; }
   trackFolder(index: number, item: Folder) { return item.id; }
 
   openGlobalCompareTool() {
-    // Get first two visible layers or first two layers
     const visibleLayers = this.layers.filter(l => l.visible && l.type !== 'base');
     const layersToCompare = visibleLayers.length >= 2 ? visibleLayers : this.layers.filter(l => l.type !== 'base');
 
     if (layersToCompare.length >= 2) {
-      // Open compare tool with the first layer
       this.mapService.openCompareTool(layersToCompare[0].id);
       this.toastService.show('Herramienta de comparación activada', 'info');
     } else {

@@ -28,8 +28,8 @@ import { HttpEventType } from '@angular/common/http';
           <line x1="12" y1="3" x2="12" y2="15"></line>
         </svg>
         <h3 *ngIf="!isCollapsed">Carga de Archivos</h3>
-        <button class="toggle-btn" (click)="toggleCollapse(); $event.stopPropagation()">
-          <i class="fas" [class.fa-chevron-down]="isCollapsed" [class.fa-chevron-up]="!isCollapsed"></i>
+        <button class="toggle-btn" *ngIf="!isCollapsed" (click)="toggleCollapse(); $event.stopPropagation()">
+          <i class="fas fa-chevron-down"></i>
         </button>
       </div>
       
