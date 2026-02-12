@@ -763,7 +763,13 @@ async def download_layer_file(layer_id: int, db: Session = Depends(get_db)):
     if not layer:
         raise HTTPException(status_code=404, detail="Layer not found")
     
-    file_path = layer.file_path
+    # Priorizar el archivo original si existe en settings/metadata
+    # (Para nubes de puntos, file_path apunta al tileset.json, pero original_path tiene el .las)
+    settings_data = layer.settings or layer.metadata or {}
+    original_path = settings_data.get("original_path")
+    
+    file_path = original_path if original_path and os.path.exists(original_path) else layer.file_path
+    
     # Ensure absolute path
     if not os.path.isabs(file_path):
        file_path = os.path.abspath(os.path.join(UPLOAD_DIR, file_path))
@@ -774,7 +780,7 @@ async def download_layer_file(layer_id: int, db: Session = Depends(get_db)):
          if os.path.exists(alt_path):
              file_path = alt_path
          else:
-             logger.error(f"Download failed: File {file_path} not found")
+             logger.error(f"Download failed: File {file_path} not found (tried {alt_path})")
              raise HTTPException(status_code=404, detail="File not found on server")
          
     return FileResponse(

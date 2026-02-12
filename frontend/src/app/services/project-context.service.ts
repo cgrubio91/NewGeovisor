@@ -9,6 +9,9 @@ export class ProjectContextService {
     private activeProjectSubject = new BehaviorSubject<Project | null>(null);
     activeProject$ = this.activeProjectSubject.asObservable();
 
+    private selectedLayerIdSubject = new BehaviorSubject<number | string | null>(null);
+    selectedLayerId$ = this.selectedLayerIdSubject.asObservable();
+
     setActiveProject(project: Project | null) {
         this.activeProjectSubject.next(project);
     }
@@ -20,5 +23,13 @@ export class ProjectContextService {
     getActiveProjectId(): number | null {
         const project = this.activeProjectSubject.value;
         return project ? project.id : null;
+    }
+
+    setSelectedLayerId(id: number | string | null) {
+        this.selectedLayerIdSubject.next(id);
+    }
+
+    getSelectedLayerId(): number | string | null {
+        return this.selectedLayerIdSubject.value;
     }
 }

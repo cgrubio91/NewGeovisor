@@ -13,6 +13,8 @@ import { DashboardComponent } from './components/dashboard/dashboard';
 import { AuthService } from './services/auth.service';
 import { Map3dService } from './services/map3d.service';
 import { LayerCompareComponent } from './components/layer-compare/layer-compare.component';
+import { TransformControlComponent } from './components/transform-control/transform-control.component';
+import { BasemapSelectorComponent } from './components/basemap-selector/basemap-selector.component';
 import { finalize } from 'rxjs/operators';
 import { Output, EventEmitter } from '@angular/core';
 
@@ -31,7 +33,9 @@ import { Output, EventEmitter } from '@angular/core';
     UserManager,
     LoginComponent,
     DashboardComponent,
-    LayerCompareComponent
+    LayerCompareComponent,
+    TransformControlComponent,
+    BasemapSelectorComponent
   ],
   template: `
     <app-toast></app-toast>
@@ -46,6 +50,7 @@ import { Output, EventEmitter } from '@angular/core';
         <ng-container *ngIf="currentView === 'map' || currentView === 'analysis'">
             <div class="map-wrapper" [class.map-3d]="viewMode === '3d'">
               <app-map *ngIf="viewMode === '2d'"></app-map>
+              <app-basemap-selector *ngIf="viewMode === '2d'"></app-basemap-selector>
               <app-map3d *ngIf="viewMode === '3d'"></app-map3d>
               
               <!-- Engine Toggle -->
@@ -63,6 +68,9 @@ import { Output, EventEmitter } from '@angular/core';
                         (click)="switchTo3D('globe')"
                         title="Globo Terráqueo">Globo</button>
               </div>
+              
+              <!-- Transform Gizmo Tools -->
+              <app-transform-control *ngIf="viewMode === '3d'"></app-transform-control>
             </div>
             <app-layer-control></app-layer-control>
             <app-upload></app-upload>
@@ -150,7 +158,7 @@ export class App {
   viewMode: '2d' | '3d' = '2d';
 
   authService = inject(AuthService);
-  private map3dService = inject(Map3dService);
+  public map3dService = inject(Map3dService);
 
   switchTo3D(mode: 'studio' | 'globe') {
     this.viewMode = '3d';

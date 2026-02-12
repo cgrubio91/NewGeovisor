@@ -85,13 +85,15 @@ export class Map3dService {
      * @param url URL del archivo tileset.json
      * @param id ID de la capa
      */
-    async add3DTileset(url: string, id?: number) {
+    async add3DTileset(url: string, id?: number, rotation?: { heading: number, pitch: number, roll: number }) {
         if (!this.viewer) return;
 
         try {
             const tileset = await Cesium.Cesium3DTileset.fromUrl(url, {
-                maximumScreenSpaceError: 2,
-                backFaceCulling: false
+                maximumScreenSpaceError: 16, // Rendimiento mejorado (antes 2)
+                backFaceCulling: false,
+                preferLeaves: true,
+                skipLevelOfDetail: true
             });
 
             this.viewer.scene.primitives.add(tileset);
@@ -110,6 +112,12 @@ export class Map3dService {
             });
 
             this.viewer.zoomTo(tileset);
+
+            // Si hay rotación guardada, aplicarla inmediatamente
+            if (rotation && id) {
+                this.rotateLayer(id, rotation);
+            }
+
             return tileset;
         } catch (error) {
             console.error('Error cargando 3D Tileset:', error);
@@ -221,6 +229,86 @@ export class Map3dService {
             const layer = layers.get(i);
             if ((layer as any)._id == layerId) {
                 layer.alpha = opacity;
+            }
+        }
+    }
+
+    /**
+     * Hace zoom a una capa específica por ID
+     */
+    zoomToLayer(layerId: string | number) {
+        if (!this.viewer) return;
+
+        // 1. Buscar en Tilesets 3D
+        const primitives = this.viewer.scene.primitives;
+        for (let i = 0; i < primitives.length; i++) {
+            const p = primitives.get(i);
+            if ((p as any)._id == layerId) {
+                this.viewer.zoomTo(p);
+                return;
+            }
+        }
+
+        // 2. Buscar en Imagery Layers (Raster)
+        const layers = this.viewer.imageryLayers;
+        for (let i = 0; i < layers.length; i++) {
+            const l = layers.get(i);
+            if ((l as any)._id == layerId && (l as any).rectangle) {
+                this.viewer.camera.flyTo({ destination: (l as any).rectangle });
+                return;
+            }
+        }
+
+        // 3. Buscar en DataSources (KML)
+        for (let i = 0; i < this.viewer.dataSources.length; i++) {
+            const ds = this.viewer.dataSources.get(i);
+            if ((ds as any)._id == layerId) {
+                this.viewer.zoomTo(ds);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Aplica rotación a un Tileset 3D
+     * @param layerId ID de la capa
+     * @param hpr Objeto con heading, pitch, roll en grados
+     */
+    rotateLayer(layerId: string | number, hpr: { heading: number, pitch: number, roll: number }) {
+        if (!this.viewer) return;
+
+        const primitives = this.viewer.scene.primitives;
+        for (let i = 0; i < primitives.length; i++) {
+            const p = primitives.get(i);
+            if ((p as any)._id == layerId && p instanceof Cesium.Cesium3DTileset) {
+                const tileset = p;
+
+                // 1. Capturar el centro original (ECEF) una sola vez
+                if (!(tileset as any)._originalCenter) {
+                    (tileset as any)._originalCenter = Cesium.Cartesian3.clone(tileset.boundingSphere.center);
+                }
+
+                const center = (tileset as any)._originalCenter;
+
+                // 2. Crear los ángulos HPR en radianes
+                const hprObj = new Cesium.HeadingPitchRoll(
+                    Cesium.Math.toRadians(hpr.heading),
+                    Cesium.Math.toRadians(hpr.pitch),
+                    Cesium.Math.toRadians(hpr.roll)
+                );
+
+                // 3. Calcular la matriz de rotación relativa al frame ENU (East-North-Up) del objeto
+                // headingPitchRollToFixedFrame crea una matriz que incluye la traslación a 'center'
+                const modelMatrix = Cesium.Transforms.headingPitchRollToFixedFrame(center, hprObj);
+
+                // 4. IMPORTANTE: Para evitar que el objeto se "vaya al espacio", debemos neutralizar 
+                // su posición original en el sistema de coordenadas de la Tierra antes de aplicar la rotación centrada.
+                const originMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(center);
+                const inverseOrigin = Cesium.Matrix4.inverse(originMatrix, new Cesium.Matrix4());
+
+                // Matriz Final = (Nueva_Pos_Con_Rotacion) * (Inversa_Pos_Original)
+                tileset.modelMatrix = Cesium.Matrix4.multiply(modelMatrix, inverseOrigin, new Cesium.Matrix4());
+                break;
             }
         }
     }
@@ -359,14 +447,22 @@ export class Map3dService {
         const scene = this.viewer.scene;
 
         if (enabled) {
-            // Ocultar globo y atmósfera
+            // Ocultar globo, atmósfera y estrellas
             scene.globe.show = false;
             if (scene.skyAtmosphere) scene.skyAtmosphere.show = false;
             if (scene.sun) scene.sun.show = false;
             if (scene.moon) scene.moon.show = false;
+            if (scene.skyBox) scene.skyBox.show = false;
 
-            // Fondo gris oscuro tipo editor 3D
+            // Fondo gris oscuro tipo editor 3D profesional
             scene.backgroundColor = Cesium.Color.fromCssColorString('#020617');
+
+            // Ajustar controles de cámara para modo estudio (más orbital)
+            scene.screenSpaceCameraController.enableLook = true;
+            scene.screenSpaceCameraController.minimumZoomDistance = 1.0;
+            scene.screenSpaceCameraController.inertiaSpin = 0.1;
+            scene.screenSpaceCameraController.inertiaTranslate = 0.1;
+            scene.screenSpaceCameraController.inertiaZoom = 0.1;
 
             // Buscar una posición razonable si hay algo cargado
             let origin = Cesium.Cartesian3.fromDegrees(-74.006, 4.711, 0);
@@ -389,12 +485,18 @@ export class Map3dService {
                 offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-45), 800)
             });
         } else {
-            // Restaurar Globo
+            // Restaurar Globo y fondo
             scene.globe.show = true;
             if (scene.skyAtmosphere) scene.skyAtmosphere.show = true;
             if (scene.sun) scene.sun.show = true;
             if (scene.moon) scene.moon.show = true;
+            if (scene.skyBox) scene.skyBox.show = true;
             scene.backgroundColor = Cesium.Color.BLACK;
+
+            // Restaurar controles por defecto
+            scene.screenSpaceCameraController.inertiaSpin = 0.9;
+            scene.screenSpaceCameraController.inertiaTranslate = 0.9;
+            scene.screenSpaceCameraController.inertiaZoom = 0.8;
 
             // Quitar Grilla y Ejes
             this.removeGrid();
@@ -427,22 +529,42 @@ export class Map3dService {
 
         // 2. Polilíneas para la grilla local
         const gridCollection = new Cesium.PolylineCollection();
-        for (let i = -size; i <= size; i += step) {
+        const subStep = step / 5; // Grilla secundaria
+
+        for (let i = -size; i <= size; i += subStep) {
+            const isMainAxis = i === 0;
+            const isMajor = Math.abs(i % step) < 0.001;
+
+            let alpha = 0.05;
+            let color = '#475569';
+            let width = 1;
+
+            if (isMainAxis) {
+                alpha = 0.5;
+                color = '#94a3b8';
+                width = 2;
+            } else if (isMajor) {
+                alpha = 0.15;
+                color = '#64748b';
+            }
+
+            // Líneas verticales (paralelas al eje Y local)
             gridCollection.add({
                 positions: [
                     this.localToGlobal(origin, new Cesium.Cartesian3(i, -size, 0)),
                     this.localToGlobal(origin, new Cesium.Cartesian3(i, size, 0))
                 ],
-                color: Cesium.Color.fromCssColorString('#475569').withAlpha(0.2),
-                width: 1
+                color: Cesium.Color.fromCssColorString(color).withAlpha(alpha),
+                width: width
             });
+            // Líneas horizontales (paralelas al eje X local)
             gridCollection.add({
                 positions: [
                     this.localToGlobal(origin, new Cesium.Cartesian3(-size, i, 0)),
                     this.localToGlobal(origin, new Cesium.Cartesian3(size, i, 0))
                 ],
-                color: Cesium.Color.fromCssColorString('#475569').withAlpha(0.2),
-                width: 1
+                color: Cesium.Color.fromCssColorString(color).withAlpha(alpha),
+                width: width
             });
         }
 

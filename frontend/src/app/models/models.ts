@@ -47,6 +47,7 @@ export interface Layer {
     visible?: boolean; // Frontend state
     opacity?: number; // Frontend state
     z_index?: number; // Frontend and Backend state
+    rotation?: { heading: number, pitch: number, roll: number }; // 3D local rotation
     processing_status?: 'pending' | 'processing' | 'completed' | 'failed';
     processing_progress?: number;
 }

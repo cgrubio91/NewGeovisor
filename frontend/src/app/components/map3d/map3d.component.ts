@@ -86,14 +86,14 @@ export class Map3dComponent implements OnInit, AfterViewInit, OnDestroy {
       } else if (layer.layer_type === 'point_cloud') {
         const isConverted = filePath.toLowerCase().endsWith('tileset.json') || filePath.toLowerCase().endsWith('.json');
         if (isConverted) {
-          this.map3dService.add3DTileset(fileUrl, layer.id);
+          this.map3dService.add3DTileset(fileUrl, layer.id, metadata?.rotation);
         } else {
           console.warn('Nube de puntos no convertida: Cesium no puede renderizar .las directamente.', layer.name);
         }
       } else if (layer.layer_type === '3d_model') {
         // Si es tileset (malla de realidad), usar add3DTileset
         if (filePath.toLowerCase().endsWith('tileset.json')) {
-          this.map3dService.add3DTileset(fileUrl, layer.id);
+          this.map3dService.add3DTileset(fileUrl, layer.id, metadata?.rotation);
         } else {
           // Para modelos GLB/GLTF/OBJ
           const pos: [number, number, number] = metadata.center || [-74.006, 4.711, 0];

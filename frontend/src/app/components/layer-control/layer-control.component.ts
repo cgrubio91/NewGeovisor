@@ -108,13 +108,24 @@ import { Layer, Folder } from '../../models/models';
 
       <!-- Reusable Layer Template -->
       <ng-template #layerItem let-layer>
-        <div class="layer-item" [class.active]="layer.visible">
+        <div class="layer-item" 
+             [class.active]="layer.visible"
+             [class.selected-layer]="isSelected(layer.id)">
           <div class="layer-main">
-            <label class="checkbox-container">
-              <input type="checkbox" [checked]="layer.visible" (change)="toggleVisibility(layer.id)">
-              <span class="checkmark"></span>
-              <span class="layer-name" [title]="layer.name" (dblclick)="openRenameModal(layer)">{{ layer.name }}</span>
-            </label>
+            <div class="checkbox-side">
+              <label class="checkbox-container">
+                <input type="checkbox" [checked]="layer.visible" (change)="toggleVisibility(layer.id); $event.stopPropagation()">
+                <span class="checkmark"></span>
+              </label>
+            </div>
+
+            <div class="name-side" (click)="selectLayer(layer.id)">
+              <span class="layer-name" 
+                    [title]="layer.name" 
+                    (dblclick)="openRenameModal(layer)">
+                {{ layer.name }}
+              </span>
+            </div>
             
             <div class="layer-actions">
               <!-- Reordering Buttons -->
@@ -283,11 +294,15 @@ import { Layer, Folder } from '../../models/models';
     }
     .layer-item:hover { background: rgba(255,255,255,0.05); }
     
-    .layer-main { 
+    .layer-main { display: flex; align-items: center; gap: 4px; }
+    .checkbox-side { display: flex; align-items: center; width: 24px; padding-left: 8px; }
+    .name-side { 
+        flex: 1; 
+        cursor: pointer; 
+        overflow: hidden; 
         display: flex; 
         align-items: center; 
-        justify-content: space-between; 
-        gap: 8px;
+        padding: 6px 0;
     }
     .layer-name { 
         font-size: 0.85rem; 
@@ -297,6 +312,14 @@ import { Layer, Folder } from '../../models/models';
         white-space: nowrap; 
         flex: 1;
         min-width: 0;
+    }
+    .layer-item.selected-layer {
+        background: rgba(0, 193, 210, 0.15) !important;
+        border: 1px solid rgba(0, 193, 210, 0.3);
+    }
+    .layer-item.selected-layer .layer-name {
+        color: var(--color-primary-cyan);
+        font-weight: 600;
     }
     .active .layer-name { color: white; font-weight: 500; }
     
@@ -387,6 +410,8 @@ import { Layer, Folder } from '../../models/models';
     .compare-btn svg {
       flex-shrink: 0;
     }
+
+    /* Rotation Styles removed to Global TransformControl */
   `]
 })
 export class LayerControlComponent implements OnInit {
@@ -418,7 +443,8 @@ export class LayerControlComponent implements OnInit {
           ...l,
           // Mantener compatibilidad con la interfaz que espera estas propiedades
           visible: l.visible !== undefined ? l.visible : true,
-          opacity: l.opacity !== undefined ? l.opacity / 100 : 1
+          opacity: l.opacity !== undefined ? l.opacity / 100 : 1,
+          rotation: l.rotation || l.settings?.rotation || { heading: 0, pitch: 0, roll: 0 }
         }));
         this.folders = project.folders || [];
         this.filterItems();
@@ -529,9 +555,12 @@ export class LayerControlComponent implements OnInit {
   }
 
   zoomToLayer(layer: any) {
+    // Intentar zoom en 2D
     if (layer.instance) {
       this.mapService.zoomToLayer(layer.instance);
     }
+    // Intentar zoom en 3D (siempre se busca por ID en el visor 3D)
+    this.map3dService.zoomToLayer(layer.id);
   }
 
   zoomToAll() {
@@ -606,6 +635,23 @@ export class LayerControlComponent implements OnInit {
         console.error(err);
       }
     });
+  }
+
+  selectLayer(id: number | string) {
+    const current = this.projectContext.getSelectedLayerId();
+    if (current == id) {
+      this.projectContext.setSelectedLayerId(null);
+    } else {
+      this.projectContext.setSelectedLayerId(id);
+    }
+  }
+
+  isSelected(id: number | string): boolean {
+    return this.projectContext.getSelectedLayerId() == id;
+  }
+
+  is3DLayer(layer: any): boolean {
+    return layer.layer_type === 'point_cloud' || layer.layer_type === '3d_model';
   }
 
   trackLayer(index: number, item: any) { return item.id; }
