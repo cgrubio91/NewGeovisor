@@ -30,7 +30,7 @@ if settings.DATABASE_URL.startswith("sqlite"):
     print("⚠️ ADVERTENCIA: Usando SQLite. Las funciones de PostGIS no estarán disponibles.")
     connect_args = {"check_same_thread": False}
 elif settings.DATABASE_URL.startswith("postgresql"):
-    print("✅ Conectando a PostgreSQL/PostGIS...")
+    print(f"✅ Conectando a PostgreSQL/PostGIS: {settings.DATABASE_URL.split('@')[-1]}")
 
 engine = create_engine(
     settings.DATABASE_URL, 

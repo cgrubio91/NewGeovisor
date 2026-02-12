@@ -11,6 +11,7 @@ import { UserManager } from './components/user-manager/user-manager';
 import { LoginComponent } from './components/login/login';
 import { DashboardComponent } from './components/dashboard/dashboard';
 import { AuthService } from './services/auth.service';
+import { Map3dService } from './services/map3d.service';
 import { LayerCompareComponent } from './components/layer-compare/layer-compare.component';
 import { finalize } from 'rxjs/operators';
 import { Output, EventEmitter } from '@angular/core';
@@ -54,9 +55,13 @@ import { Output, EventEmitter } from '@angular/core';
                         (click)="viewMode = '2d'"
                         title="Vista 2D">2D</button>
                 <button class="toggle-btn" 
-                        [class.active]="viewMode === '3d'" 
-                        (click)="viewMode = '3d'"
-                        title="Vista 3D">3D</button>
+                        [class.active]="viewMode === '3d' && map3dService.localModeEnabled" 
+                        (click)="switchTo3D('studio')"
+                        title="Entorno 3D (Studio)">3D Studio</button>
+                <button class="toggle-btn" 
+                        [class.active]="viewMode === '3d' && !map3dService.localModeEnabled" 
+                        (click)="switchTo3D('globe')"
+                        title="Globo Terráqueo">Globo</button>
               </div>
             </div>
             <app-layer-control></app-layer-control>
@@ -145,6 +150,21 @@ export class App {
   viewMode: '2d' | '3d' = '2d';
 
   authService = inject(AuthService);
+  private map3dService = inject(Map3dService);
+
+  switchTo3D(mode: 'studio' | 'globe') {
+    this.viewMode = '3d';
+    this.map3dService.localModeEnabled = (mode === 'studio');
+    // Esperar un poco a que el componente 3D se monte si no estaba activo
+    setTimeout(() => {
+      this.map3dService.toggleLocalMode(this.map3dService.localModeEnabled);
+    }, 100);
+  }
+
+  toggleLocal3D() {
+    this.map3dService.localModeEnabled = !this.map3dService.localModeEnabled;
+    this.map3dService.toggleLocalMode(this.map3dService.localModeEnabled);
+  }
 
   constructor() {
     effect(() => {

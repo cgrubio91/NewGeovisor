@@ -11,6 +11,9 @@ import { Subject } from 'rxjs';
 export class Map3dService {
     private viewer!: Cesium.Viewer;
     public isInitialized = new Subject<boolean>();
+    public localModeEnabled = true; // Default to Studio
+    private gridPrimitive: any = null;
+    private axesPrimitive: any = null;
 
     constructor() {
         // Configurar base path para assets de Cesium
@@ -97,12 +100,13 @@ export class Map3dService {
 
             // Si es una nube de puntos, aplicar estilo para mejorar visibilidad
             tileset.pointCloudShading.attenuation = true;
-            tileset.pointCloudShading.maximumAttenuation = 5.0;
+            tileset.pointCloudShading.maximumAttenuation = 8.0;
             tileset.pointCloudShading.geometricErrorScale = 1.0;
+            tileset.pointCloudShading.eyeDomeLighting = true; // Muy importante para nubes de puntos sin normales
 
             // Estilo por defecto tipo Google Earth
             tileset.style = new Cesium.Cesium3DTileStyle({
-                pointSize: 4.0
+                pointSize: 5.0
             });
 
             this.viewer.zoomTo(tileset);
@@ -119,18 +123,29 @@ export class Map3dService {
     async addRasterLayer(name: string, url: string, bounds?: number[], id?: number) {
         if (!this.viewer) return;
 
+        let rectangle: Cesium.Rectangle | undefined;
+
+        // Validar que los bounds sean un array de 4 números válidos
+        if (bounds && Array.isArray(bounds) && bounds.length === 4 && bounds.every(v => typeof v === 'number' && !isNaN(v))) {
+            try {
+                rectangle = Cesium.Rectangle.fromDegrees(bounds[0], bounds[1], bounds[2], bounds[3]);
+            } catch (e) {
+                console.warn('Error creando rectángulo de Cesium:', e);
+            }
+        }
+
         const provider = new Cesium.UrlTemplateImageryProvider({
             url: url,
-            rectangle: bounds ? Cesium.Rectangle.fromDegrees(bounds[0], bounds[1], bounds[2], bounds[3]) : undefined
+            rectangle: rectangle
         });
 
         const layer = this.viewer.imageryLayers.addImageryProvider(provider);
-        (layer as any)._name = name; // Guardar nombre para identificar
-        (layer as any)._id = id;     // Guardar ID
+        (layer as any)._name = name;
+        (layer as any)._id = id;
 
-        if (bounds) {
+        if (rectangle) {
             this.viewer.camera.flyTo({
-                destination: Cesium.Rectangle.fromDegrees(bounds[0], bounds[1], bounds[2], bounds[3])
+                destination: rectangle
             });
         }
         return layer;
@@ -332,5 +347,141 @@ export class Map3dService {
     setSwipePosition(percent: number) {
         if (!this.viewer) return;
         this.viewer.scene.splitPosition = percent / 100;
+    }
+
+    /**
+     * Alterna entre modo Global (Globo terraqueo) y Local (Estudio 3D)
+     */
+    toggleLocalMode(enabled: boolean) {
+        if (!this.viewer) return;
+        this.localModeEnabled = enabled;
+
+        const scene = this.viewer.scene;
+
+        if (enabled) {
+            // Ocultar globo y atmósfera
+            scene.globe.show = false;
+            if (scene.skyAtmosphere) scene.skyAtmosphere.show = false;
+            if (scene.sun) scene.sun.show = false;
+            if (scene.moon) scene.moon.show = false;
+
+            // Fondo gris oscuro tipo editor 3D
+            scene.backgroundColor = Cesium.Color.fromCssColorString('#020617');
+
+            // Buscar una posición razonable si hay algo cargado
+            let origin = Cesium.Cartesian3.fromDegrees(-74.006, 4.711, 0);
+            const primitives = this.viewer.scene.primitives;
+            for (let i = 0; i < primitives.length; i++) {
+                const p = primitives.get(i);
+                if (p.boundingSphere) {
+                    origin = p.boundingSphere.center;
+                    break;
+                }
+            }
+
+            // Agregar Grilla
+            this.addGrid(origin);
+            // Agregar Ejes
+            this.addAxes(origin);
+
+            // Configurar cámara para vista local
+            this.viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(origin, 300), {
+                offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-45), 800)
+            });
+        } else {
+            // Restaurar Globo
+            scene.globe.show = true;
+            if (scene.skyAtmosphere) scene.skyAtmosphere.show = true;
+            if (scene.sun) scene.sun.show = true;
+            if (scene.moon) scene.moon.show = true;
+            scene.backgroundColor = Cesium.Color.BLACK;
+
+            // Quitar Grilla y Ejes
+            this.removeGrid();
+            this.removeAxes();
+        }
+    }
+
+    private addGrid(origin: Cesium.Cartesian3) {
+        if (!this.viewer || this.gridPrimitive) return;
+
+        const size = 2000;
+        const step = 100;
+
+        // 1. Plano de suelo circular sutil
+        const floorPrimitive = new Cesium.Primitive({
+            geometryInstances: new Cesium.GeometryInstance({
+                geometry: new Cesium.CircleGeometry({
+                    center: origin,
+                    radius: size,
+                    vertexFormat: Cesium.EllipsoidSurfaceAppearance.VERTEX_FORMAT
+                })
+            }),
+            appearance: new Cesium.EllipsoidSurfaceAppearance({
+                material: Cesium.Material.fromType('Color', {
+                    color: Cesium.Color.fromCssColorString('#0f172a').withAlpha(0.5)
+                }),
+                flat: true
+            })
+        });
+
+        // 2. Polilíneas para la grilla local
+        const gridCollection = new Cesium.PolylineCollection();
+        for (let i = -size; i <= size; i += step) {
+            gridCollection.add({
+                positions: [
+                    this.localToGlobal(origin, new Cesium.Cartesian3(i, -size, 0)),
+                    this.localToGlobal(origin, new Cesium.Cartesian3(i, size, 0))
+                ],
+                color: Cesium.Color.fromCssColorString('#475569').withAlpha(0.2),
+                width: 1
+            });
+            gridCollection.add({
+                positions: [
+                    this.localToGlobal(origin, new Cesium.Cartesian3(-size, i, 0)),
+                    this.localToGlobal(origin, new Cesium.Cartesian3(size, i, 0))
+                ],
+                color: Cesium.Color.fromCssColorString('#475569').withAlpha(0.2),
+                width: 1
+            });
+        }
+
+        this.gridPrimitive = [
+            this.viewer.scene.primitives.add(floorPrimitive),
+            this.viewer.scene.primitives.add(gridCollection)
+        ];
+    }
+
+    private localToGlobal(origin: Cesium.Cartesian3, local: Cesium.Cartesian3): Cesium.Cartesian3 {
+        const matrix = Cesium.Transforms.eastNorthUpToFixedFrame(origin);
+        return Cesium.Matrix4.multiplyByPoint(matrix, local, new Cesium.Cartesian3());
+    }
+
+    private removeGrid() {
+        if (this.gridPrimitive) {
+            if (Array.isArray(this.gridPrimitive)) {
+                this.gridPrimitive.forEach(p => this.viewer.scene.primitives.remove(p));
+            } else {
+                this.viewer.scene.primitives.remove(this.gridPrimitive);
+            }
+            this.gridPrimitive = null;
+        }
+    }
+
+    private addAxes(origin: Cesium.Cartesian3) {
+        if (!this.viewer || this.axesPrimitive) return;
+        const modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(origin);
+        this.axesPrimitive = this.viewer.scene.primitives.add(new (Cesium as any).DebugModelMatrixPrimitive({
+            modelMatrix: modelMatrix,
+            length: 150.0,
+            width: 3.0
+        }));
+    }
+
+    private removeAxes() {
+        if (this.axesPrimitive) {
+            this.viewer.scene.primitives.remove(this.axesPrimitive);
+            this.axesPrimitive = null;
+        }
     }
 }

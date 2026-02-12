@@ -96,12 +96,12 @@ export class MapComponent implements OnInit, AfterViewInit {
 
         if (uploadsIndex !== -1) {
           // Extraer todo lo que está después de 'uploads/'
-          const relativePath = normalizedPath.substring(uploadsIndex + uploadsMarker.length);
-          kmlUrl = `${this.apiService.getApiUrl()}/files/${relativePath}`;
+          const relativePath = normalizedPath.substring(uploadsIndex + uploadsMarker.length).replace(/^\/+/, '');
+          kmlUrl = `${this.apiService.getApiUrl()}/uploads/${relativePath}`;
         } else {
           // Si no hay 'uploads/', probar si es una ruta ya relativa
           const filename = filePath.split(/[\\/]/).pop();
-          kmlUrl = `${this.apiService.getApiUrl()}/files/${filename}`;
+          kmlUrl = `${this.apiService.getApiUrl()}/uploads/${filename}`;
         }
 
         this.mapService.addKmlLayer(layer.name, kmlUrl, layer.id, layer.folder_id);

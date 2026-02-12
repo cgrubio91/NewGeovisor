@@ -37,7 +37,7 @@ export interface Project {
 export interface Layer {
     id?: number;
     name: string;
-    layer_type: 'raster' | 'vector' | '3d_model' | 'kml';
+    layer_type: 'raster' | 'vector' | '3d_model' | 'kml' | 'point_cloud';
     file_path: string;
     crs?: string;
     project_id: number;

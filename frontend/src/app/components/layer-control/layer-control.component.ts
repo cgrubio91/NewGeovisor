@@ -411,15 +411,15 @@ export class LayerControlComponent implements OnInit {
   private toastService = inject(ToastService);
 
   ngOnInit(): void {
-    // Sincronizar capas desde el MapService
-    this.mapService.layersChanged.subscribe(layers => {
-      this.layers = layers;
-      this.filterItems();
-    });
-
-    // Sincronizar carpetas desde el Proyecto Activo
+    // Sincronizar capas desde el Proyecto Activo (Fuente de verdad única)
     this.projectContext.activeProject$.subscribe(project => {
       if (project) {
+        this.layers = (project.layers || []).map(l => ({
+          ...l,
+          // Mantener compatibilidad con la interfaz que espera estas propiedades
+          visible: l.visible !== undefined ? l.visible : true,
+          opacity: l.opacity !== undefined ? l.opacity / 100 : 1
+        }));
         this.folders = project.folders || [];
         this.filterItems();
       }

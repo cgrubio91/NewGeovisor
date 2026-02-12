@@ -18,6 +18,7 @@ except Exception:
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends, status, BackgroundTasks
 from convert_cogs import convert_to_cog
+from convert_3d import convert_point_cloud, convert_obj_to_glb
 from fastapi.responses import Response, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -44,7 +45,7 @@ from rasterio.errors import NodataShadowWarning
 # Suppress specific rasterio warning
 warnings.filterwarnings("ignore", category=NodataShadowWarning)
 
-from database import engine, get_db, settings
+from database import engine, get_db, settings, SessionLocal
 from gis_service import gis_service
 
 # --- AUTH CONFIG ---
@@ -317,6 +318,71 @@ def process_raster_pipeline(file_path: str, layer_id: int):
         # 2. Seed (warm up) cache for common zoom levels
         seed_cache_for_layer(file_path, layer_id)
 
+def process_3d_pipeline(file_path: str, layer_id: int):
+    """
+    Pipeline para procesar archivos 3D en segundo plano.
+    Convierte LAS/LAZ -> 3D Tiles
+    Convierte OBJ -> GLB
+    Actualiza la BD con la nueva ruta.
+    """
+    db = SessionLocal()
+    print(f"DEBUG 3D: Starting pipeline for layer_id={layer_id}, file={file_path}")
+    try:
+        layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
+        if not layer:
+            print(f"DEBUG 3D: Layer {layer_id} not found in DB")
+            return
+
+        ext = os.path.splitext(file_path)[1].lower()
+        print(f"DEBUG 3D: Extension detected: {ext}")
+        new_path = None
+        
+        if ext in ['.las', '.laz']:
+            # ... (no changes here but I need to keep the structure)
+            output_dir = os.path.join(os.path.dirname(file_path), f"3d_tiles_{layer_id}")
+            print(f"DEBUG 3D: Converting Point Cloud to {output_dir}")
+            success, result = convert_point_cloud(file_path, output_dir)
+            
+            if success:
+                new_path = result
+                print(f"DEBUG 3D: Point Cloud SUCCESS. New path: {new_path}")
+                
+        elif ext == '.obj':
+            output_path = os.path.splitext(file_path)[0] + ".glb"
+            print(f"DEBUG 3D: Converting OBJ to {output_path}")
+            success, result = convert_obj_to_glb(file_path, output_path)
+            
+            if success:
+                new_path = result
+                print(f"DEBUG 3D: OBJ SUCCESS. New path: {new_path}")
+
+        if new_path:
+            print(f"DEBUG 3D: Updating DB for layer {layer_id}")
+            layer.file_path = new_path
+            layer.processing_status = "completed"
+            layer.processing_progress = 100
+            layer.metadata = {**(layer.metadata or {}), "optimized": True, "original_path": file_path}
+            db.commit()
+            print(f"DEBUG 3D: DATABASE UPDATED for layer {layer_id}")
+        else:
+            print(f"DEBUG 3D: No new_path generated, marking as failed")
+            layer.processing_status = "failed"
+            db.commit()
+            
+    except Exception as e:
+        print(f"Error in 3D pipeline: {e}")
+        try:
+            db.rollback()
+            layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
+            if layer:
+                layer.processing_status = "failed"
+                layer.metadata = {**(layer.metadata or {}), "error": str(e)}
+                db.commit()
+        except:
+            pass
+    finally:
+        db.close()
+
 # --- UPLOAD ENDPOINT ---
 @app.post("/upload")
 async def upload_files(
@@ -455,10 +521,12 @@ async def upload_files(
             )
             created_layer = crud.create_layer(db=db, layer=layer_in)
             
-            # Start background optimization for rasters
-            if layer_type == 'raster' and background_tasks:
+            # Iniciar optimización en segundo plano
+            if layer_type == 'raster':
                 background_tasks.add_task(process_raster_pipeline, file_path, created_layer.id)
-            
+            elif layer_type == 'point_cloud' or (layer_type == '3d_model' and file_format == 'obj'):
+                background_tasks.add_task(process_3d_pipeline, file_path, created_layer.id)
+                
         except Exception as e:
             print(f"Error processing file {filename}: {e}")
             uploaded_files.append({

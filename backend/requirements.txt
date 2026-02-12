@@ -14,8 +14,11 @@ fiona==1.9.5
 shapely==2.0.2
 fastkml==0.12
 
-# Procesamiento geoespacial - Nubes de puntos
+# Procesamiento geoespacial - Nubes de puntos y 3D
 laspy[lazrs]==2.5.1
+py3dtiles==5.0.0
+trimesh==4.0.5
+scipy==1.11.4
 
 # Procesamiento geoespacial - CAD
 ezdxf==1.1.3

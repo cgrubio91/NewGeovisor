@@ -1,0 +1,16 @@
+✅ Conectando a PostgreSQL/PostGIS...
+Layer counts by type:
+- kml: 9
+- raster: 114
+
+Last 10 layers:
+ID: 297, Name: HospitalBosaJun252021_Orthomosaic_export_WedOct26181641290011, Type: raster, Status: cancelled, Path: uploads\HospitalBosaJun252021_Orthomosaic_export_WedOct26181641290011.tif
+ID: 296, Name: OrtofotoDic302021_Orthomosaic_export_WedOct26183953035306, Type: raster, Status: completed, Path: uploads\OrtofotoDic302021_Orthomosaic_export_WedOct26183953035306_1.tif
+ID: 273, Name: Map1_Orthomosaic-4-12_export_MonOct30144115413987, Type: raster, Status: completed, Path: uploads\Map1_Orthomosaic-4-12_export_MonOct30144115413987.tif
+ID: 272, Name: Map1_Orthomosaic-2-17_export_MonOct30144115413987, Type: raster, Status: completed, Path: uploads\Map1_Orthomosaic-2-17_export_MonOct30144115413987.tif
+ID: 271, Name: Map1_Orthomosaic-8-22_export_MonOct30144115413987, Type: raster, Status: completed, Path: uploads\Map1_Orthomosaic-8-22_export_MonOct30144115413987.tif
+ID: 270, Name: Map1_Orthomosaic-5-18_export_MonOct30144115413987, Type: raster, Status: completed, Path: uploads\Map1_Orthomosaic-5-18_export_MonOct30144115413987.tif
+ID: 269, Name: Map1_Orthomosaic-5-15_export_MonOct30144115413987, Type: raster, Status: completed, Path: uploads\Map1_Orthomosaic-5-15_export_MonOct30144115413987.tif
+ID: 268, Name: Map1_Orthomosaic-5-14_export_MonOct30144115413987, Type: raster, Status: completed, Path: uploads\Map1_Orthomosaic-5-14_export_MonOct30144115413987.tif
+ID: 267, Name: Map1_Orthomosaic-3-15_export_MonOct30144115413987, Type: raster, Status: completed, Path: uploads\Map1_Orthomosaic-3-15_export_MonOct30144115413987.tif
+ID: 266, Name: Map1_Orthomosaic-1-7_export_MonOct30144115413987, Type: raster, Status: completed, Path: uploads\Map1_Orthomosaic-1-7_export_MonOct30144115413987.tif

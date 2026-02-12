@@ -49,7 +49,7 @@ import { HttpEventType } from '@angular/common/http';
             id="file-upload" 
             (change)="onFileSelected($event)" 
             multiple
-            accept=".tif,.geotiff,.tiff,.kml,.kmz,.ecw,.obj,.gltf,.glb"
+            accept=".tif,.geotiff,.tiff,.kml,.kmz,.ecw,.obj,.gltf,.glb,.las,.laz"
             class="file-input">
           <label for="file-upload" class="file-label">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -57,7 +57,7 @@ import { HttpEventType } from '@angular/common/http';
               <polyline points="13 2 13 9 20 9"></polyline>
             </svg>
             <span class="label-text">Seleccionar Archivos</span>
-            <span class="label-hint">TIFF, ECW, KML, KMZ, OBJ/3D</span>
+            <span class="label-hint">TIFF, ECW, KML, KMZ, OBJ, LAS, LAZ</span>
           </label>
         </div>
         

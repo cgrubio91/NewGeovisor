@@ -141,7 +141,7 @@
                 <p class="description">{{ project.description || 'Sin descripción' }}</p>
                 <div class="meta">
                     <span><i class="far fa-calendar-alt"></i> {{ project.start_date | date:'dd/MM/yy' }}</span>
-                    <span><i class="fas fa-layer-group"></i> {{ project.layers?.length || 0 }}</span>
+                    <span><i class="fas fa-layer-group"></i> {{ project.layers.length }}</span>
                     <span><i class="fas fa-users"></i> {{ project.assigned_users?.length || 0 }}</span>
                 </div>
             </div>

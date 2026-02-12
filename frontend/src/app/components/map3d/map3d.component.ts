@@ -28,6 +28,11 @@ export class Map3dComponent implements OnInit, AfterViewInit, OnDestroy {
   ngAfterViewInit(): void {
     this.map3dService.initViewer('cesiumContainer');
 
+    // Aplicar Modo Estudio si está activo por defecto
+    setTimeout(() => {
+      this.map3dService.toggleLocalMode(this.map3dService.localModeEnabled);
+    }, 1000);
+
     // Sincronizar capas del proyecto activo
     this.projectContext.activeProject$.subscribe(project => {
       if (project) {
@@ -51,23 +56,46 @@ export class Map3dComponent implements OnInit, AfterViewInit, OnDestroy {
 
       let fileUrl = '';
       if (uploadsIndex !== -1) {
-        const relativePath = normalizedPath.substring(uploadsIndex + 9);
-        fileUrl = `${this.apiService.getApiUrl()}/files/${relativePath}`;
+        const relativePath = normalizedPath.substring(uploadsIndex + 8).replace(/^\/+/, ''); // Borrar 'uploads/' o 'uploads\'
+        fileUrl = `${this.apiService.getApiUrl()}/uploads/${relativePath}`;
       } else {
         const filename = filePath.split(/[\\/]/).pop();
-        fileUrl = `${this.apiService.getApiUrl()}/files/${filename}`;
+        fileUrl = `${this.apiService.getApiUrl()}/uploads/${filename}`;
       }
 
       if (layer.layer_type === 'raster') {
         const filename = filePath.split(/[\\/]/).pop() || '';
         const tileUrl = `${this.apiService.getApiUrl()}/tiles/${filename}/{z}/{x}/{y}.png`;
-        this.map3dService.addRasterLayer(layer.name, tileUrl, metadata.bounds, layer.id);
+        // Extraer y normalizar bounds
+        let extent: number[] | undefined;
+        if (metadata && metadata.bounds_wgs84) {
+          const b = metadata.bounds_wgs84;
+          extent = [Number(b.minx), Number(b.miny), Number(b.maxx), Number(b.maxy)];
+        } else if (metadata && metadata.bounds) {
+          const b = metadata.bounds;
+          extent = [
+            Number(b.left !== undefined ? b.left : b[0]),
+            Number(b.bottom !== undefined ? b.bottom : b[1]),
+            Number(b.right !== undefined ? b.right : b[2]),
+            Number(b.top !== undefined ? b.top : b[3])
+          ];
+        }
+        if (extent && extent.some(v => isNaN(v))) extent = undefined;
+
+        this.map3dService.addRasterLayer(layer.name, tileUrl, extent, layer.id);
+      } else if (layer.layer_type === 'point_cloud') {
+        const isConverted = filePath.toLowerCase().endsWith('tileset.json') || filePath.toLowerCase().endsWith('.json');
+        if (isConverted) {
+          this.map3dService.add3DTileset(fileUrl, layer.id);
+        } else {
+          console.warn('Nube de puntos no convertida: Cesium no puede renderizar .las directamente.', layer.name);
+        }
       } else if (layer.layer_type === '3d_model') {
-        // Si es tileset, usar add3DTileset
+        // Si es tileset (malla de realidad), usar add3DTileset
         if (filePath.toLowerCase().endsWith('tileset.json')) {
           this.map3dService.add3DTileset(fileUrl, layer.id);
         } else {
-          // Para otros modelos, se necesita posición (asumimos centro de bounds si existen)
+          // Para modelos GLB/GLTF/OBJ
           const pos: [number, number, number] = metadata.center || [-74.006, 4.711, 0];
           this.map3dService.addModel(fileUrl, pos);
         }
