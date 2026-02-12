@@ -24,4 +24,16 @@ export class DashboardService {
     getProcessingStatus(): Observable<any[]> {
         return this.http.get<any[]>(`${this.baseUrl}/dashboard/processing-status`);
     }
+
+    pauseProcess(layerId: number): Observable<any> {
+        return this.http.post(`${this.baseUrl}/layers/${layerId}/pause`, {});
+    }
+
+    resumeProcess(layerId: number): Observable<any> {
+        return this.http.post(`${this.baseUrl}/layers/${layerId}/resume`, {});
+    }
+
+    cancelProcess(layerId: number): Observable<any> {
+        return this.http.delete(`${this.baseUrl}/layers/${layerId}/process`);
+    }
 }

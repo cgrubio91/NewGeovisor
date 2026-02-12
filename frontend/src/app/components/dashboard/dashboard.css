@@ -232,14 +232,69 @@
 .item-info {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     margin-bottom: 8px;
     font-size: 0.9rem;
     color: var(--text-primary);
 }
 
+.item-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 12px;
+    max-width: 60%;
+}
+
+.item-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.control-btn {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 2px 6px;
+    color: var(--text-primary);
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.control-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: scale(1.05);
+}
+
+.control-btn.pause:hover {
+    color: #ffd700;
+    border-color: #ffd700;
+}
+
+.control-btn.resume:hover {
+    color: #00e676;
+    border-color: #00e676;
+}
+
+.control-btn.cancel:hover {
+    color: #ff5252;
+    border-color: #ff5252;
+}
+
 .item-status {
     font-weight: 600;
     color: #00c1d2;
+    margin-right: 8px;
+    font-size: 0.8rem;
+}
+
+.paused-text {
+    color: #ffd700 !important;
 }
 
 .progress-bar-monitor {

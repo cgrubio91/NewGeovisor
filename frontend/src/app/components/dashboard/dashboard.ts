@@ -61,11 +61,34 @@ export class DashboardComponent implements OnInit, OnDestroy {
     mockPoll() {
         this.dashboardService.getProcessingStatus().subscribe({
             next: (data) => {
-                console.log('Processing Layers Update:', data);
+                // console.log('Processing Layers Update:', data); // Reduce console spam
                 this.processingLayers = data || [];
                 this.cdr.detectChanges();
             },
             error: (err) => console.error('Error polling processing status:', err)
         });
+    }
+
+    onPause(item: any) {
+        this.dashboardService.pauseProcess(item.id).subscribe({
+            next: () => this.mockPoll(),
+            error: (err) => console.error('Error pausing process', err)
+        });
+    }
+
+    onResume(item: any) {
+        this.dashboardService.resumeProcess(item.id).subscribe({
+            next: () => this.mockPoll(),
+            error: (err) => console.error('Error resuming process', err)
+        });
+    }
+
+    onCancel(item: any) {
+        if (confirm(`¿Estás seguro de cancelar el procesamiento de "${item.name}"?`)) {
+            this.dashboardService.cancelProcess(item.id).subscribe({
+                next: () => this.mockPoll(),
+                error: (err) => console.error('Error cancelling process', err)
+            });
+        }
     }
 }

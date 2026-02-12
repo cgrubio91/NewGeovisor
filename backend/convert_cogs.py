@@ -28,6 +28,15 @@ def update_layer_progress(db, layer_id, status, progress):
         logger.error(f"Error updating layer progress: {e}")
         db.rollback()
 
+def check_layer_status(db, layer_id):
+    """Check current processing status of the layer"""
+    if not layer_id:
+        return "processing"
+    # Re-query to get fresh status
+    db.expire_all()
+    layer = db.query(models.Layer).filter(models.Layer.id == layer_id).first()
+    return layer.processing_status if layer else "cancelled"
+
 def convert_to_cog(filepath, layer_id=None):
     """
     Convierte un archivo TIFF a un formato optimizado (COG-like):
@@ -101,6 +110,18 @@ def convert_to_cog(filepath, layer_id=None):
                         # Map 10-80% to copying phase
                         current_pct = 10 + int((i / total_windows) * 70)
                         update_layer_progress(db, layer_id, "processing", current_pct)
+                        
+                        # Check for Pause/Cancel
+                        import time
+                        status = check_layer_status(db, layer_id)
+                        while status == "paused":
+                            print(f"⏸️ Proceso pausado para capa {layer_id}. Esperando...")
+                            time.sleep(2)
+                            status = check_layer_status(db, layer_id)
+                        
+                        if status == "cancelled":
+                            print(f"🛑 Proceso cancelado para capa {layer_id}.")
+                            return False
                 
                 if layer_id:
                     update_layer_progress(db, layer_id, "processing_overviews", 80)

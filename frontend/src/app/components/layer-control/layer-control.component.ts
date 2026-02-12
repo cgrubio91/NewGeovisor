@@ -125,10 +125,14 @@ import { Layer, Folder } from '../../models/models';
                 </div>
               </div>
               
-              <button class="action-btn" (click)="zoomToLayer(layer); $event.stopPropagation()" title="Zoom">
-                <i class="fas fa-search-plus"></i>
-              </button>
-            </div>
+                <button class="action-btn" (click)="downloadLayer(layer); $event.stopPropagation()" title="Descargar">
+                  <i class="fas fa-download"></i>
+                </button>
+                
+                <button class="action-btn" (click)="zoomToLayer(layer); $event.stopPropagation()" title="Zoom">
+                  <i class="fas fa-search-plus"></i>
+                </button>
+              </div>
           </div>
           
           <div class="layer-details" *ngIf="layer.visible">
@@ -497,22 +501,30 @@ export class LayerControlComponent implements OnInit {
         }
       });
     }
+  });
+}
   }
 
-  trackLayer(index: number, item: any) { return item.id; }
-  trackFolder(index: number, item: Folder) { return item.id; }
+downloadLayer(layer: any) {
+  if (typeof layer.id !== 'number') return;
+  const url = `${this.projectService.getApiUrl()}/layers/${layer.id}/download`;
+  window.open(url, '_blank');
+}
 
-  openGlobalCompareTool() {
-    // Get first two visible layers or first two layers
-    const visibleLayers = this.layers.filter(l => l.visible && l.type !== 'base');
-    const layersToCompare = visibleLayers.length >= 2 ? visibleLayers : this.layers.filter(l => l.type !== 'base');
+trackLayer(index: number, item: any) { return item.id; }
+trackFolder(index: number, item: Folder) { return item.id; }
 
-    if (layersToCompare.length >= 2) {
-      // Open compare tool with the first layer
-      this.mapService.openCompareTool(layersToCompare[0].id);
-      this.toastService.show('Herramienta de comparación activada', 'info');
-    } else {
-      this.toastService.show('Necesitas al menos 2 capas para comparar', 'warning');
-    }
+openGlobalCompareTool() {
+  // Get first two visible layers or first two layers
+  const visibleLayers = this.layers.filter(l => l.visible && l.type !== 'base');
+  const layersToCompare = visibleLayers.length >= 2 ? visibleLayers : this.layers.filter(l => l.type !== 'base');
+
+  if (layersToCompare.length >= 2) {
+    // Open compare tool with the first layer
+    this.mapService.openCompareTool(layersToCompare[0].id);
+    this.toastService.show('Herramienta de comparación activada', 'info');
+  } else {
+    this.toastService.show('Necesitas al menos 2 capas para comparar', 'warning');
   }
+}
 }

@@ -628,7 +628,7 @@ def get_processing_status(db: Session = Depends(get_db)):
     Returns list of layers currently being processed (pending or processing)
     """
     layers = db.query(models.Layer).filter(
-        models.Layer.processing_status.in_(['pending', 'processing', 'processing_overviews'])
+        models.Layer.processing_status.in_(['pending', 'processing', 'processing_overviews', 'paused'])
     ).all()
     
     return [
@@ -641,6 +641,79 @@ def get_processing_status(db: Session = Depends(get_db)):
         }
         for l in layers
     ]
+
+
+# --- PROCESS MANAGEMENT ENDPOINTS ---
+
+@app.post("/layers/{layer_id}/pause")
+async def pause_layer_processing(layer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Pause a running processing task"""
+    layer = crud.get_layer(db, layer_id)
+    if not layer:
+        raise HTTPException(status_code=404, detail="Layer not found")
+    
+    if layer.processing_status in ["processing", "processing_overviews"]:
+        layer.processing_status = "paused"
+        db.commit()
+        logger.info(f"Layer {layer_id} paused by user {current_user.username}")
+    
+    return {"status": layer.processing_status}
+
+@app.post("/layers/{layer_id}/resume")
+async def resume_layer_processing(layer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Resume a paused processing task"""
+    layer = crud.get_layer(db, layer_id)
+    if not layer:
+        raise HTTPException(status_code=404, detail="Layer not found")
+    
+    if layer.processing_status == "paused":
+        layer.processing_status = "processing"
+        db.commit()
+        logger.info(f"Layer {layer_id} resumed by user {current_user.username}")
+    
+    return {"status": layer.processing_status}
+
+@app.delete("/layers/{layer_id}/process")
+async def cancel_layer_processing(layer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Cancel a running processing task"""
+    layer = crud.get_layer(db, layer_id)
+    if not layer:
+        raise HTTPException(status_code=404, detail="Layer not found")
+    
+    # Allow cancelling only if actively running or paused
+    if layer.processing_status in ["processing", "processing_overviews", "paused", "pending"]:
+        layer.processing_status = "cancelled"
+        db.commit()
+        logger.info(f"Layer {layer_id} cancelled by user {current_user.username}")
+    
+    return {"status": "cancelled"}
+
+@app.get("/layers/{layer_id}/download")
+async def download_layer_file(layer_id: int, db: Session = Depends(get_db)):
+    """Download the original layer file"""
+    layer = crud.get_layer(db, layer_id)
+    if not layer:
+        raise HTTPException(status_code=404, detail="Layer not found")
+    
+    file_path = layer.file_path
+    # Ensure absolute path
+    if not os.path.isabs(file_path):
+       file_path = os.path.abspath(os.path.join(UPLOAD_DIR, file_path))
+    
+    if not os.path.exists(file_path):
+         # Try just filename in upload directory as fallback
+         alt_path = os.path.join(UPLOAD_DIR, os.path.basename(file_path))
+         if os.path.exists(alt_path):
+             file_path = alt_path
+         else:
+             logger.error(f"Download failed: File {file_path} not found")
+             raise HTTPException(status_code=404, detail="File not found on server")
+         
+    return FileResponse(
+        path=file_path, 
+        filename=os.path.basename(file_path),
+        media_type='application/octet-stream'
+    )
 
 if __name__ == "__main__":
     import uvicorn

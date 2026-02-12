@@ -11,6 +11,10 @@ export class ProjectService {
 
     constructor(private http: HttpClient) { }
 
+    getApiUrl() {
+        return this.baseUrl;
+    }
+
     // --- Projects ---
     createProject(project: Partial<Project>): Observable<Project> {
         return this.http.post<Project>(`${this.baseUrl}/projects/`, project);

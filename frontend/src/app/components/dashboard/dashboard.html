@@ -77,7 +77,24 @@
             <div class="monitor-item" *ngFor="let item of processingLayers">
                 <div class="item-info">
                     <span class="item-name">{{ item.name }}</span>
-                    <span class="item-status">{{ item.status | titlecase }}</span>
+                    <div class="item-controls">
+                        <span class="item-status" [class.paused-text]="item.status === 'paused'">{{ item.status |
+                            titlecase }}</span>
+
+                        <button class="control-btn pause" *ngIf="item.status !== 'paused' && item.status !== 'pending'"
+                            (click)="onPause(item)" title="Pausar">
+                            ⏸️
+                        </button>
+
+                        <button class="control-btn resume" *ngIf="item.status === 'paused'" (click)="onResume(item)"
+                            title="Reanudar">
+                            ▶️
+                        </button>
+
+                        <button class="control-btn cancel" (click)="onCancel(item)" title="Cancelar">
+                            ⏹️
+                        </button>
+                    </div>
                 </div>
                 <div class="progress-bar-monitor">
                     <div class="progress-fill" [style.width]="(item.progress || 0) + '%'"></div>

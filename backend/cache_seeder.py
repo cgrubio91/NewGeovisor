@@ -13,7 +13,7 @@ import mercantile
 
 from database import SessionLocal
 from shared import tile_cache, UPLOAD_DIR
-from convert_cogs import update_layer_progress
+from convert_cogs import update_layer_progress, check_layer_status
 from tile_renderer import tile_renderer
 
 logger = logging.getLogger(__name__)
@@ -87,6 +87,17 @@ def seed_cache_for_layer(file_path, layer_id):
             if processed % 20 == 0:
                 pct = int((processed / total_count) * 100)
                 update_layer_progress(db, layer_id, "processing", pct)
+                
+                # Check status
+                status = check_layer_status(db, layer_id)
+                import time
+                while status == "paused":
+                    time.sleep(2)
+                    status = check_layer_status(db, layer_id)
+                
+                if status == "cancelled":
+                    logger.info(f"Seeding cancelled for layer {layer_id}")
+                    return
 
         update_layer_progress(db, layer_id, "completed", 100)
         logger.info(

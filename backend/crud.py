@@ -208,6 +208,9 @@ def delete_folder(db: Session, folder_id: int):
     return db_folder
 
 # --- LAYER CRUD ---
+def get_layer(db: Session, layer_id: int):
+    return db.query(Layer).filter(Layer.id == layer_id).first()
+
 def create_layer(db: Session, layer: LayerCreate):
     try:
         layer_data = layer.dict()
