@@ -121,6 +121,7 @@ import { Layer, Folder } from '../../models/models';
                   <a (click)="moveLayer(layer, undefined)">Mover a Raíz</a>
                   <a *ngFor="let f of folders" (click)="moveLayer(layer, f.id)">Mover a {{f.name}}</a>
                   <hr>
+                  <a (click)="downloadLayer(layer)">Descargar Capa</a>
                   <a class="text-danger" (click)="deleteLayer(layer)">Eliminar Capa</a>
                 </div>
               </div>
@@ -501,30 +502,28 @@ export class LayerControlComponent implements OnInit {
         }
       });
     }
-  });
-}
   }
 
-downloadLayer(layer: any) {
-  if (typeof layer.id !== 'number') return;
-  const url = `${this.projectService.getApiUrl()}/layers/${layer.id}/download`;
-  window.open(url, '_blank');
-}
-
-trackLayer(index: number, item: any) { return item.id; }
-trackFolder(index: number, item: Folder) { return item.id; }
-
-openGlobalCompareTool() {
-  // Get first two visible layers or first two layers
-  const visibleLayers = this.layers.filter(l => l.visible && l.type !== 'base');
-  const layersToCompare = visibleLayers.length >= 2 ? visibleLayers : this.layers.filter(l => l.type !== 'base');
-
-  if (layersToCompare.length >= 2) {
-    // Open compare tool with the first layer
-    this.mapService.openCompareTool(layersToCompare[0].id);
-    this.toastService.show('Herramienta de comparación activada', 'info');
-  } else {
-    this.toastService.show('Necesitas al menos 2 capas para comparar', 'warning');
+  downloadLayer(layer: any) {
+    if (typeof layer.id !== 'number') return;
+    const url = `${this.projectService.getApiUrl()}/layers/${layer.id}/download`;
+    window.open(url, '_blank');
   }
-}
+
+  trackLayer(index: number, item: any) { return item.id; }
+  trackFolder(index: number, item: Folder) { return item.id; }
+
+  openGlobalCompareTool() {
+    // Get first two visible layers or first two layers
+    const visibleLayers = this.layers.filter(l => l.visible && l.type !== 'base');
+    const layersToCompare = visibleLayers.length >= 2 ? visibleLayers : this.layers.filter(l => l.type !== 'base');
+
+    if (layersToCompare.length >= 2) {
+      // Open compare tool with the first layer
+      this.mapService.openCompareTool(layersToCompare[0].id);
+      this.toastService.show('Herramienta de comparación activada', 'info');
+    } else {
+      this.toastService.show('Necesitas al menos 2 capas para comparar', 'warning');
+    }
+  }
 }
