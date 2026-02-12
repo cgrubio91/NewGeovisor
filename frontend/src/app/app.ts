@@ -103,7 +103,7 @@ import { Output, EventEmitter } from '@angular/core';
 
     .engine-toggle {
       position: absolute;
-      top: 20px;
+      top: 80px;
       right: 20px;
       z-index: 1500;
       background: rgba(10, 25, 41, 0.8);
