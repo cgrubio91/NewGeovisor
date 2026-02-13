@@ -272,7 +272,7 @@ frontend/src/app/
 │   ├── header/         # Barra de navegación
 │   ├── login/          # Autenticación
 │   ├── dashboard/      # Panel de estadísticas
-│   ├── project-manager/# Gestión de proyectos
+│   ├── project-manager/# Gestión de proyectos (Navega a /map al abrir)
 │   ├── user-manager/   # Administración de usuarios
 │   ├── upload/         # Subida de archivos
 │   ├── layer-control/  # Panel de capas
@@ -297,18 +297,38 @@ frontend/src/app/
 ### Componentes Principales
 
 #### `app.ts` (Componente Raíz)
-**Propósito:** Componente principal que orquesta la aplicación.
+**Propósito:** Componente principal que orquesta la estructura base de la aplicación.
 
 **Responsabilidades:**
-- Gestiona la navegación entre vistas (Dashboard, Proyectos, Mapa, Usuarios)
-- Controla el modo de visualización (2D, 3D Studio, Globo)
-- Renderiza componentes según el estado de autenticación
+- Renderiza el `HeaderComponent` y el `RouterOutlet`.
+- Maneja el estado de autenticación global.
+- Delega la navegación al `Angular Router`.
 
-**Estados de Vista:**
-```typescript
-currentView: 'dashboard' | 'projects' | 'map' | 'analysis' | 'users'
-viewMode: '2d' | '3d'
+**Estructura del Template:**
+```html
+<app-header></app-header>
+<main>
+  <router-outlet></router-outlet> <!-- Aquí se cargan las vistas -->
+</main>
 ```
+
+#### `app.routes.ts` (Configuración de Rutas)
+**Propósito:** Define la navegación de la aplicación mediante URLs.
+
+**Rutas Configuradas:**
+- `/dashboard` → `DashboardComponent`
+- `/projects` → `ProjectManager`
+- `/map` → `MapViewComponent` (Visor 2D/3D)
+- `/users` → `UserManager`
+- `/**` → Redirección a `/dashboard` (404)
+
+#### `map-view.component.ts` (Contenedor del Visor)
+**Propósito:** Vista principal que agrupa todos los componentes del mapa.
+
+**Responsabilidades:**
+- Contiene `MapComponent` (2D) y `Map3dComponent` (3D).
+- Gestiona el cambio entre modos (2D, 3D Studio, Globo).
+- Aloja los paneles flotantes (`LayerControl`, `Upload`, `LayerCompare`).
 
 #### `map.component.ts` (Mapa 2D)
 **Propósito:** Visualización 2D con OpenLayers.
@@ -971,4 +991,27 @@ grep "ERROR" backend/logs/app.log
 
 ---
 
+
+---
+
+## 🚀 Despliegue Rápido (Demo)
+
+Para demostraciones rápidas o pruebas de concepto sin coste inicial:
+
+### Opciones Gratuitas Recomendadas
+
+| Plataforma | Uso | Ventaja |
+|------------|-----|---------|
+| **Railway.app** | Backend + BD | Despliegue automático desde GitHub, PostgreSQL incluido. |
+| **Netlify/Vercel** | Frontend | Hosting estático gratuito, CDN global, SSL automático. |
+| **Google Cloud Free Tier** | Full Stack | Crédito gratuito de $300 USD por 90 días. |
+
+**Estrategia para Demos:**
+- Usar archivos de muestra ligeros (<100MB) pre-convertidos.
+- Desplegar Backend en Railway y Frontend en Netlify.
+- Mostrar capacidades clave: Visualización 3D, Comparación (Swipe), Gestión de Usuarios.
+
+---
+
 **Última actualización:** 12 de febrero de 2026
+

@@ -78,6 +78,15 @@ app.add_middleware(
 
 from shared import UPLOAD_DIR, tile_cache
 
+# Middleware para Cache-Control en archivos estáticos
+@app.middleware("http")
+async def add_cache_control_header(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/uploads/3d_tiles_") and response.status_code == 200:
+        # Cachear archivos 3D Tiles por 1 año (son inmutables)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    return response
+
 # Mount static files using shared UPLOAD_DIR
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 

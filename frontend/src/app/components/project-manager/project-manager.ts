@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, ChangeDetectorRef } from '@angular/core';
+import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ProjectService } from '../../services/project.service';
@@ -7,7 +8,6 @@ import { ProjectContextService } from '../../services/project-context.service';
 import { AuthService } from '../../services/auth.service';
 import { Project, User } from '../../models/models';
 import { finalize } from 'rxjs/operators';
-import { Output, EventEmitter } from '@angular/core';
 
 @Component({
   selector: 'app-project-manager',
@@ -37,7 +37,7 @@ export class ProjectManager implements OnInit {
   selectedUserIdForAssignment: number | null = null;
   userSearchQuery = '';
 
-  @Output() onNavigate = new EventEmitter<string>();
+  private router = inject(Router);
 
   private projectService = inject(ProjectService);
   private toastService = inject(ToastService);
@@ -225,6 +225,6 @@ export class ProjectManager implements OnInit {
   selectProject(project: Project) {
     this.projectContext.setActiveProject(project);
     this.toastService.show(`Proyecto "${project.name}" seleccionado`, 'info');
-    this.onNavigate.emit('map');
+    this.router.navigate(['/map']);
   }
 }

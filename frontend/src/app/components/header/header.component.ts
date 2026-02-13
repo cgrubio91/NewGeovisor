@@ -1,5 +1,6 @@
-import { Component, EventEmitter, Output, inject, OnInit } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 
 /**
@@ -10,7 +11,7 @@ import { AuthService } from '../../services/auth.service';
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink, RouterLinkActive],
   template: `
     <header class="header">
       <div class="header-container">
@@ -25,33 +26,33 @@ import { AuthService } from '../../services/auth.service';
 
         <!-- Navegación Principal -->
         <nav class="main-nav">
-          <button class="nav-item" [class.active]="activeTab === 'dashboard'" (click)="navigate('dashboard')">
+          <a routerLink="/dashboard" routerLinkActive="active" class="nav-item">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
               <polyline points="9 22 9 12 15 12 15 22"></polyline>
             </svg>
             <span>Dashboard</span>
-          </button>
+          </a>
           
-          <button class="nav-item" [class.active]="activeTab === 'projects'" (click)="navigate('projects')">
+          <a routerLink="/projects" routerLinkActive="active" class="nav-item">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
               <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
               <line x1="12" y1="22.08" x2="12" y2="12"></line>
             </svg>
             <span>Proyectos</span>
-          </button>
+          </a>
           
-          <button class="nav-item" [class.active]="activeTab === 'map'" (click)="navigate('map')">
+          <a routerLink="/map" routerLinkActive="active" class="nav-item">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
               <circle cx="12" cy="10" r="3"></circle>
             </svg>
             <span>Visor de Mapas</span>
-          </button>
+          </a>
           
-          <button *ngIf="authService.currentUser()?.role === 'administrador'" 
-                  class="nav-item" [class.active]="activeTab === 'users'" (click)="navigate('users')">
+          <a *ngIf="authService.currentUser()?.role === 'administrador'" 
+                  routerLink="/users" routerLinkActive="active" class="nav-item">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
               <circle cx="9" cy="7" r="4"></circle>
@@ -59,7 +60,7 @@ import { AuthService } from '../../services/auth.service';
               <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
             </svg>
             <span>Usuarios</span>
-          </button>
+          </a>
         </nav>
 
         <!-- Acciones del Usuario -->
@@ -252,23 +253,12 @@ import { AuthService } from '../../services/auth.service';
     }
   `]
 })
-export class HeaderComponent implements OnInit {
-  @Output() onNavigate = new EventEmitter<string>();
-  activeTab = 'map';
-
+export class HeaderComponent {
   authService = inject(AuthService);
-
-  ngOnInit() {
-    console.log('HeaderComponent loaded. Current user:', this.authService.currentUser());
-  }
-
-  navigate(tab: string) {
-    this.activeTab = tab;
-    this.onNavigate.emit(tab);
-  }
+  router = inject(Router);
 
   logout() {
     this.authService.logout();
-    this.navigate('map');
+    this.router.navigate(['/dashboard']);
   }
 }
