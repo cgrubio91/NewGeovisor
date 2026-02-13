@@ -10,19 +10,19 @@ import { BasemapSelectorComponent } from '../../components/basemap-selector/base
 import { Map3dService } from '../../services/map3d.service';
 
 @Component({
-    selector: 'app-map-view',
-    standalone: true,
-    imports: [
-        CommonModule,
-        MapComponent,
-        Map3dComponent,
-        LayerControlComponent,
-        UploadComponent,
-        LayerCompareComponent,
-        TransformControlComponent,
-        BasemapSelectorComponent
-    ],
-    template: `
+  selector: 'app-map-view',
+  standalone: true,
+  imports: [
+    CommonModule,
+    MapComponent,
+    Map3dComponent,
+    LayerControlComponent,
+    UploadComponent,
+    LayerCompareComponent,
+    TransformControlComponent,
+    BasemapSelectorComponent
+  ],
+  template: `
     <div class="map-container">
       <div class="map-wrapper" [class.map-3d]="viewMode === '3d'">
         <app-map *ngIf="viewMode === '2d'"></app-map>
@@ -54,7 +54,7 @@ import { Map3dService } from '../../services/map3d.service';
       <app-layer-compare></app-layer-compare>
     </div>
   `,
-    styles: [`
+  styles: [`
     .map-container {
       display: flex;
       height: 100%;
@@ -75,7 +75,7 @@ import { Map3dService } from '../../services/map3d.service';
     .engine-toggle {
       position: absolute;
       top: 20px;
-      right: 20px;
+      left: 20px;
       z-index: 1000;
       display: flex;
       gap: 8px;
@@ -110,17 +110,17 @@ import { Map3dService } from '../../services/map3d.service';
   `]
 })
 export class MapViewComponent {
-    map3dService = inject(Map3dService);
-    viewMode: '2d' | '3d' = '2d';
+  map3dService = inject(Map3dService);
+  viewMode: '2d' | '3d' = '2d';
 
-    switchTo3D(mode: 'studio' | 'globe') {
-        this.viewMode = '3d';
-        setTimeout(() => {
-            if (mode === 'studio') {
-                this.map3dService.toggleLocalMode(true);
-            } else {
-                this.map3dService.toggleLocalMode(false);
-            }
-        }, 100);
-    }
+  switchTo3D(mode: 'studio' | 'globe') {
+    this.viewMode = '3d';
+    setTimeout(() => {
+      if (mode === 'studio') {
+        this.map3dService.toggleLocalMode(true);
+      } else {
+        this.map3dService.toggleLocalMode(false);
+      }
+    }, 100);
+  }
 }
