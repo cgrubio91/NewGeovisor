@@ -589,9 +589,10 @@ export class LayerControlComponent implements OnInit {
   }
 
   zoomToLayer(layer: any) {
-    // Intentar zoom en 2D
-    if (layer.instance) {
-      this.mapService.zoomToLayer(layer.instance);
+    // Intentar zoom en 2D: Buscar la instancia viva en el servicio
+    const liveLayer = this.mapService.getLayerById(layer.id);
+    if (liveLayer && liveLayer.instance) {
+      this.mapService.zoomToLayer(liveLayer.instance);
     }
     // Intentar zoom en 3D (siempre se busca por ID en el visor 3D)
     this.map3dService.zoomToLayer(layer.id);
@@ -599,7 +600,10 @@ export class LayerControlComponent implements OnInit {
 
   zoomToAll() {
     if (this.layers.length === 0) return;
+
+    // Intentar zoom en ambos visores para cubrir todos los casos
     this.mapService.zoomToAllLayers();
+    this.map3dService.zoomToAllLayers();
   }
 
   openCompareTool(id: any) {

@@ -75,7 +75,7 @@ import { Map3dService } from '../../services/map3d.service';
     .engine-toggle {
       position: absolute;
       top: 20px;
-      left: 20px;
+      left: 60px;
       z-index: 1000;
       display: flex;
       gap: 8px;

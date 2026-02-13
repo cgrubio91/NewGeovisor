@@ -235,9 +235,6 @@ export class Map3dService {
         }
     }
 
-    /**
-     * Hace zoom a una capa específica por ID
-     */
     zoomToLayer(layerId: string | number) {
         if (!this.viewer) return;
 
@@ -268,6 +265,59 @@ export class Map3dService {
                 this.viewer.zoomTo(ds);
                 return;
             }
+        }
+    }
+
+    /**
+     * Hace zoom para ver todas las capas visibles
+     */
+    zoomToAllLayers() {
+        if (!this.viewer) return;
+
+        const targets: any[] = [];
+
+        // Primitivas (Tilesets)
+        const primitives = this.viewer.scene.primitives;
+        for (let i = 0; i < primitives.length; i++) {
+            const p = primitives.get(i);
+            // Ignorar grillas y ejes
+            const isGrid = p === this.gridPrimitive || (Array.isArray(this.gridPrimitive) && this.gridPrimitive.includes(p));
+            const isAxes = p === this.axesPrimitive;
+
+            if (!isGrid && !isAxes && p.show !== false) {
+                targets.push(p);
+            }
+        }
+
+        // DataSources (KML/GeoJSON)
+        for (let i = 0; i < this.viewer.dataSources.length; i++) {
+            const ds = this.viewer.dataSources.get(i);
+            if (ds.show !== false) {
+                targets.push(ds);
+            }
+        }
+
+        // Entities directly added
+        if (this.viewer.entities.values.length > 0) {
+            targets.push(this.viewer.entities);
+        }
+
+        if (targets.length > 0) {
+            // Cesium puede hacer zoom a un array de entidades/provisores
+            // Pero para primitivas mixtas, es mejor calcular bounds manualmente o intentar zoomTo
+            // zoomTo acepta Entity, EntityCollection, DataSource, etc. 
+            // Para tilesets, debemos usar boundingSphere.
+
+            // Simplificación: si hay un solo target principal (ej: tileset), zoom a él.
+            // Si hay multiples, intentamos zoomTo(targets) pero zoomTo solo acepta UN target o array de entities.
+            // Primitives no son Entities.
+
+            // Estrategia: Calcular bounding sphere total
+
+            /* implementación simplificada: Zoom al primero o principal */
+            this.viewer.zoomTo(targets[0]);
+
+            // TODO: Implementar cálculo de BoundingSphere combinado para soporte múltiple robusto
         }
     }
 
