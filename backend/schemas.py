@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import List, Optional, Any
 from datetime import datetime
 
@@ -80,11 +80,64 @@ class FolderBase(BaseModel):
 class FolderCreate(FolderBase):
     pass
 
+class FolderUpdate(BaseModel):
+    name: Optional[str] = None
+    parent_id: Optional[int] = None
+
+
+# Measurement Schemas
+class MeasurementBase(BaseModel):
+    name: str
+    measurement_type: str # 'length', 'area', 'point'
+    geometry: Any # GeoJSON dict
+    measurement_data: Optional[dict] = None
+    style: Optional[dict] = None
+    folder_id: Optional[int] = None
+    visible: Optional[bool] = True
+    description: Optional[str] = None
+    link: Optional[str] = None
+    icon: Optional[str] = None
+
+class MeasurementCreate(MeasurementBase):
+    project_id: int
+
+class MeasurementUpdate(BaseModel):
+    name: Optional[str] = None
+    measurement_data: Optional[dict] = None
+    style: Optional[dict] = None
+    folder_id: Optional[int] = None
+    visible: Optional[bool] = None
+    description: Optional[str] = None
+    link: Optional[str] = None
+    icon: Optional[str] = None
+
+class MeasurementRead(MeasurementBase):
+    id: int
+    project_id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+    @field_validator('geometry', mode='before')
+    @classmethod
+    def convert_geometry(cls, v):
+        if v is not None and not isinstance(v, (dict, list)):
+            try:
+                from geoalchemy2.shape import to_shape
+                from shapely.geometry import mapping
+                return mapping(to_shape(v))
+            except Exception:
+                return v
+        return v
+
 class FolderRead(FolderBase):
     id: int
     created_at: datetime
     layers: List[LayerRead] = []
-    # subfolders: List['FolderRead'] = [] # Pydantic v2 might need forward refs
+    measurements: List[MeasurementRead] = []
+    # subfolders: List['FolderRead'] = [] 
 
     class Config:
         from_attributes = True
@@ -117,6 +170,7 @@ class ProjectRead(ProjectBase):
     updated_at: Optional[datetime] = None
     layers: List[LayerRead] = []
     folders: List[FolderRead] = []
+    measurements: List[MeasurementRead] = []
     assigned_users: List[UserRead] = []
 
     class Config:
@@ -125,3 +179,8 @@ class ProjectRead(ProjectBase):
 class ProjectAssign(BaseModel):
     user_id: int
     project_id: int
+
+
+# Update ProjectRead to include measurements
+class ProjectReadFull(ProjectRead):
+    measurements: List[MeasurementRead] = []

@@ -16,12 +16,11 @@ try:
 except Exception:
     pass
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Depends, status, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, File, UploadFile, Form, BackgroundTasks, Response, Query, status
 from convert_cogs import convert_to_cog
 from convert_3d import convert_point_cloud, convert_obj_to_glb
-from fastapi.responses import Response, FileResponse
+from fastapi.responses import Response, FileResponse, JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -289,6 +288,127 @@ def delete_project(project_id: int, db: Session = Depends(get_db), current_user:
     crud.delete_project(db, project_id)
     return {"message": "Project deleted successfully"}
 
+# --- MEASUREMENT ENDPOINTS ---
+@app.get("/projects/{project_id}/measurements", response_model=List[schemas.MeasurementRead])
+def get_project_measurements(project_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Obtener todas las medidas de un proyecto"""
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.owner_id != current_user.id and current_user not in project.assigned_users:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return crud.get_measurements_by_project(db, project_id)
+
+@app.post("/measurements", response_model=schemas.MeasurementRead)
+def create_measurement(measurement: schemas.MeasurementCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Crear una nueva medida"""
+    project = db.query(models.Project).filter(models.Project.id == measurement.project_id).first()
+    if not project:
+         raise HTTPException(status_code=404, detail="Project not found")
+    if project.owner_id != current_user.id and current_user not in project.assigned_users:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return crud.create_measurement(db, measurement)
+
+@app.patch("/measurements/{measurement_id}", response_model=schemas.MeasurementRead)
+def update_measurement(measurement_id: int, measurement_update: schemas.MeasurementUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Actualizar una medida"""
+    db_measurement = db.query(models.Measurement).filter(models.Measurement.id == measurement_id).first()
+    if not db_measurement:
+        raise HTTPException(status_code=404, detail="Measurement not found")
+    
+    project = db_measurement.project
+    if project.owner_id != current_user.id and current_user not in project.assigned_users:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return crud.update_measurement(db, measurement_id, measurement_update)
+
+@app.delete("/measurements/{measurement_id}")
+def delete_measurement(measurement_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Eliminar una medida"""
+    db_measurement = db.query(models.Measurement).filter(models.Measurement.id == measurement_id).first()
+    if not db_measurement:
+        raise HTTPException(status_code=404, detail="Measurement not found")
+    
+    project = db_measurement.project
+    if project.owner_id != current_user.id and current_user not in project.assigned_users:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    crud.delete_measurement(db, measurement_id)
+    return {"message": "Measurement deleted successfully"}
+
+@app.get("/projects/{project_id}/measurements/export/kmz")
+def export_measurements_kmz(
+    project_id: int, 
+    measurement_ids: Optional[str] = Query(None),
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """Exportar medidas de un proyecto a formato KMZ"""
+    try:
+        from fastkml import kml
+        from shapely.geometry import shape
+        import zipfile
+        import json
+        from sqlalchemy.sql import func
+        
+        project = db.query(models.Project).filter(models.Project.id == project_id).first()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        if project.owner_id != current_user.id and current_user not in project.assigned_users:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        query = db.query(models.Measurement).filter(models.Measurement.project_id == project_id)
+        
+        if measurement_ids:
+            ids = [int(x) for x in measurement_ids.split(',')]
+            query = query.filter(models.Measurement.id.in_(ids))
+            
+        measurements = query.all()
+        
+        k = kml.KML()
+        ns = '{http://www.opengis.net/kml/2.2}'
+        d = kml.Document(ns, 'docid', project.name, 'Medidas del proyecto')
+        k.add_element(d)
+        
+        for m in measurements:
+            p = kml.Placemark(ns, str(m.id), m.name, f"Tipo: {m.measurement_type}")
+            # Convertir geometría de PostGIS a GeoJSON dict
+            geom_json = json.loads(db.scalar(func.ST_AsGeoJSON(m.geometry)))
+            geom = shape(geom_json)
+            p.geometry = geom
+            d.add_element(p)
+        
+        kml_str = k.to_string(prettyprint=True)
+        
+        # Crear ZIP (KMZ es un ZIP con un doc.kml)
+        kmz_io = io.BytesIO()
+        with zipfile.ZipFile(kmz_io, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr('doc.kml', kml_str)
+        
+        kmz_io.seek(0)
+        
+        filename = f"medidas_{project.name.replace(' ', '_')}.kmz"
+        
+        logging.info(f"KMZ exported successfully for project {project_id}")
+        
+        return StreamingResponse(
+            kmz_io,
+            media_type="application/vnd.google-earth.kmz",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition",
+                "Access-Control-Allow-Origin": "http://localhost:4200",
+                "Access-Control-Allow-Credentials": "true"
+            }
+        )
+    except Exception as e:
+        import traceback
+        logging.error(f"Error exporting KMZ: {e}\n{traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/dashboard/stats")
 def get_stats(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Obtener estadísticas reales para el dashboard"""
@@ -311,6 +431,18 @@ def read_folders(project_id: int, db: Session = Depends(get_db), current_user: m
 def delete_folder(folder_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     crud.delete_folder(db, folder_id)
     return {"message": "Folder deleted successfully", "id": folder_id}
+
+@app.patch("/folders/{folder_id}", response_model=schemas.FolderRead)
+def update_folder(folder_id: int, folder_update: schemas.FolderUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_folder = db.query(models.Folder).filter(models.Folder.id == folder_id).first()
+    if not db_folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    
+    project = db_folder.project
+    if project.owner_id != current_user.id and current_user not in project.assigned_users:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    return crud.update_folder(db, folder_id, folder_update.model_dump(exclude_unset=True))
 
 from cache_seeder import seed_cache_for_layer
 
@@ -858,5 +990,5 @@ if __name__ == "__main__":
         "main:app", 
         host="0.0.0.0", 
         port=8000, 
-        reload=False
+        reload=True
     )

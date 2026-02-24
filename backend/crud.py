@@ -1,7 +1,8 @@
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func, or_, text
-from models import User, Project, Layer, Folder
-from schemas import UserCreate, ProjectCreate, LayerCreate, FolderCreate
+from models import User, Project, Layer, Folder, Measurement
+from schemas import UserCreate, ProjectCreate, LayerCreate, FolderCreate, MeasurementCreate, MeasurementUpdate
+import json
 from passlib.context import CryptContext
 import os
 import logging
@@ -199,10 +200,22 @@ def create_folder(db: Session, folder: FolderCreate):
 def get_folders_by_project(db: Session, project_id: int):
     return db.query(Folder).filter(Folder.project_id == project_id).all()
 
+def update_folder(db: Session, folder_id: int, folder_data: dict):
+    db_folder = db.query(Folder).filter(Folder.id == folder_id).first()
+    if db_folder:
+        for key, value in folder_data.items():
+            if hasattr(db_folder, key):
+                setattr(db_folder, key, value)
+        db.commit()
+        db.refresh(db_folder)
+    return db_folder
+
 def delete_folder(db: Session, folder_id: int):
     db_folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if db_folder:
+        # Desvincular capas y mediciones antes de borrar
         db.query(Layer).filter(Layer.folder_id == folder_id).update({Layer.folder_id: None})
+        db.query(Measurement).filter(Measurement.folder_id == folder_id).update({Measurement.folder_id: None})
         db.delete(db_folder)
         db.commit()
     return db_folder
@@ -284,3 +297,89 @@ def get_dashboard_stats(db: Session, user_id: int = None, is_admin: bool = False
         "top_projects": [{"name": p.name, "visits": p.visit_count or 0} for p in top_projects],
         "top_users": top_users
     }
+
+# --- MEASUREMENT CRUD ---
+def create_measurement(db: Session, measurement: MeasurementCreate):
+    try:
+        # Convertir GeoJSON dict a string para ST_GeomFromGeoJSON
+        geo_str = json.dumps(measurement.geometry)
+        
+        db_measurement = Measurement(
+            name=measurement.name,
+            project_id=measurement.project_id,
+            folder_id=measurement.folder_id,
+            measurement_type=measurement.measurement_type,
+            geometry=func.ST_SetSRID(func.ST_GeomFromGeoJSON(geo_str), 4326),
+            measurement_data=measurement.measurement_data,
+            style=measurement.style,
+            visible=measurement.visible
+        )
+        
+        db.add(db_measurement)
+        db.commit()
+        db.refresh(db_measurement)
+        
+        # Devolver con la geometría como GeoJSON
+        return get_measurement(db, db_measurement.id)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error al crear medida: {e}")
+        raise e
+
+def get_measurement(db: Session, measurement_id: int):
+    # Usamos ST_AsGeoJSON para devolver la geometría en formato legible por el frontend
+    result = db.query(
+        Measurement,
+        func.ST_AsGeoJSON(Measurement.geometry).label("geometry_geojson")
+    ).filter(Measurement.id == measurement_id).first()
+    
+    if result:
+        measurement, geojson = result
+        # Convertir el string de GeoJSON a dict
+        measurement_dict = {c.name: getattr(measurement, c.name) for c in measurement.__table__.columns}
+        measurement_dict["geometry"] = json.loads(geojson)
+        return measurement_dict
+    return None
+
+def get_measurements_by_project(db: Session, project_id: int):
+    results = db.query(
+        Measurement,
+        func.ST_AsGeoJSON(Measurement.geometry).label("geometry_geojson")
+    ).filter(Measurement.project_id == project_id).order_by(Measurement.created_at.desc()).all()
+    
+    measurements = []
+    for measurement, geojson in results:
+        m_dict = {c.name: getattr(measurement, c.name) for c in measurement.__table__.columns}
+        m_dict["geometry"] = json.loads(geojson)
+        measurements.append(m_dict)
+    return measurements
+
+def update_measurement(db: Session, measurement_id: int, measurement_update: MeasurementUpdate):
+    db_measurement = db.query(Measurement).filter(Measurement.id == measurement_id).first()
+    if not db_measurement:
+        return None
+        
+    update_data = measurement_update.dict(exclude_unset=True)
+    
+    # Actualizar campos directamente
+    for key, value in update_data.items():
+        if hasattr(db_measurement, key):
+            setattr(db_measurement, key, value)
+    
+    try:
+        db.add(db_measurement)
+        db.commit()
+        db.refresh(db_measurement)
+        return db_measurement
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating measurement: {e}")
+        raise e
+
+def delete_measurement(db: Session, measurement_id: int):
+    db_measurement = db.query(Measurement).filter(Measurement.id == measurement_id).first()
+    if db_measurement:
+        db.delete(db_measurement)
+        db.commit()
+        return True
+    return False

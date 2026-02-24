@@ -56,6 +56,7 @@ class Project(Base):
     assigned_users = relationship("User", secondary=user_projects, back_populates="assigned_projects")
     layers = relationship("Layer", back_populates="project", cascade="all, delete-orphan")
     folders = relationship("Folder", back_populates="project", cascade="all, delete-orphan")
+    measurements = relationship("Measurement", back_populates="project", cascade="all, delete-orphan")
 
 class Folder(Base):
     __tablename__ = "folders"
@@ -69,6 +70,7 @@ class Folder(Base):
     # Relaciones
     project = relationship("Project", back_populates="folders")
     layers = relationship("Layer", back_populates="folder")
+    measurements = relationship("Measurement", back_populates="folder")
     subfolders = relationship("Folder", backref="parent", remote_side=[id])
 
 class Layer(Base):
@@ -113,3 +115,41 @@ class Layer(Base):
     # Relaciones
     project = relationship("Project", back_populates="layers")
     folder = relationship("Folder", back_populates="layers")
+
+class Measurement(Base):
+    __tablename__ = "measurements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, nullable=False)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    folder_id = Column(Integer, ForeignKey("folders.id", ondelete="SET NULL"), nullable=True)
+    
+    # 'length', 'area' or 'point'
+    measurement_type = Column(String, nullable=False)
+    
+    # Optional comment or notes
+    description = Column(String, nullable=True)
+    
+    # Optional URL link
+    link = Column(String, nullable=True)
+    
+    # Optional icon name
+    icon = Column(String, nullable=True)
+    
+    # Geometry in GeoJSON format or similar, stored as Geometry for PostGIS
+    geometry = Column(Geometry(srid=4326), nullable=False)
+    
+    # Numerical value and unit: { "value": 150.5, "unit": "m" }
+    measurement_data = Column(JSON, nullable=True)
+    
+    # Styling: { "color": "#ff0000", "stroke_width": 2, "line_dash": [5, 5], "fill_color": "rgba(255,0,0,0.2)", "filled": true }
+    style = Column(JSON, nullable=True)
+    
+    visible = Column(Boolean, default=True, nullable=False)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # Relaciones
+    project = relationship("Project", back_populates="measurements")
+    folder = relationship("Folder", back_populates="measurements")

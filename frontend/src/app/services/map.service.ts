@@ -12,7 +12,8 @@ import GeoJSON from 'ol/format/GeoJSON';
 import KML from 'ol/format/KML';
 import { register } from 'ol/proj/proj4';
 import proj4 from 'proj4';
-import { Subject, BehaviorSubject } from 'rxjs';
+import { Subject, BehaviorSubject, Observable } from 'rxjs';
+import { filter } from 'rxjs/operators';
 import { Style, Fill, Stroke, Text, Circle as CircleStyle } from 'ol/style';
 
 // Register all available proj4 definitions
@@ -32,6 +33,9 @@ export class MapService {
     private loadingLayers = new Set<number | string>();
     public layersChanged = new BehaviorSubject<any[]>([]);
     public compareToolTrigger = new Subject<string | number | null>();
+
+    private mapSubject = new BehaviorSubject<OlMap | null>(null);
+    public map$ = this.mapSubject.asObservable().pipe(filter(m => !!m)) as Observable<OlMap>;
 
     constructor() { }
 
@@ -72,6 +76,8 @@ export class MapService {
                 maxZoom: 24  // Allow high zoom for detailed orthophotos
             })
         });
+
+        this.mapSubject.next(this.map);
         this.updateLayerList();
         return this.map;
     }
@@ -279,7 +285,7 @@ export class MapService {
         const layers = this.map.getLayers().getArray();
         for (let i = layers.length - 1; i >= 0; i--) {
             const layer = layers[i];
-            if (layer.get('type') !== 'base') {
+            if (layer.get('type') !== 'base' && layer.get('type') !== 'overlay') {
                 this.map.removeLayer(layer);
             }
         }

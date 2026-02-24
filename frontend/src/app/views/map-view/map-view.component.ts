@@ -7,6 +7,7 @@ import { UploadComponent } from '../../components/upload/upload.component';
 import { LayerCompareComponent } from '../../components/layer-compare/layer-compare.component';
 import { TransformControlComponent } from '../../components/transform-control/transform-control.component';
 import { BasemapSelectorComponent } from '../../components/basemap-selector/basemap-selector.component';
+import { MeasurementPanelComponent } from '../../components/measurement-panel/measurement-panel.component';
 import { Map3dService } from '../../services/map3d.service';
 
 @Component({
@@ -20,7 +21,8 @@ import { Map3dService } from '../../services/map3d.service';
     UploadComponent,
     LayerCompareComponent,
     TransformControlComponent,
-    BasemapSelectorComponent
+    BasemapSelectorComponent,
+    MeasurementPanelComponent
   ],
   template: `
     <div class="map-container">
@@ -47,6 +49,9 @@ import { Map3dService } from '../../services/map3d.service';
         
         <!-- Transform Gizmo Tools -->
         <app-transform-control *ngIf="viewMode === '3d'"></app-transform-control>
+
+        <!-- Measurement Tools (2D only) -->
+        <app-measurement-panel *ngIf="viewMode === '2d'"></app-measurement-panel>
       </div>
       
       <app-layer-control></app-layer-control>

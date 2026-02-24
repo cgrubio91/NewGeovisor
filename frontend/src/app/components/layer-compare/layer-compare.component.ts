@@ -100,8 +100,8 @@ import { Subscription } from 'rxjs';
   styles: [`
     .compare-container {
       position: absolute;
-      top: 100px;
-      right: 20px;
+      bottom: 20px;
+      right: 80px;
       width: 320px;
       background: rgba(10, 25, 41, 0.95);
       backdrop-filter: blur(12px);
@@ -380,7 +380,7 @@ export class LayerCompareComponent implements OnInit, OnDestroy {
     // 1. Hide all OTHER non-base layers
     this.availableLayers.forEach(layer => {
       const isSelected = layer.id == this.leftLayerId || layer.id == this.rightLayerId;
-      if (layer.type !== 'base' && !isSelected) {
+      if (layer.type !== 'base' && layer.type !== 'overlay' && !isSelected) {
         if (layer.visible) {
           this.previouslyHiddenLayers.add(layer.id);
           this.mapService.setLayerVisibility(layer.id, false);

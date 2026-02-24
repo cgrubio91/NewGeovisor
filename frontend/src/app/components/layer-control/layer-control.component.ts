@@ -61,6 +61,9 @@ import { Layer, Folder } from '../../models/models';
                 <i class="fas fa-folder"></i>
                 <span class="folder-name">{{ folder.name }}</span>
                 <div class="folder-actions" (click)="$event.stopPropagation()">
+                   <button class="action-btn mini" (click)="renameFolder(folder)" title="Renombrar Carpeta">
+                     <i class="fas fa-edit"></i>
+                   </button>
                    <button class="action-btn mini" (click)="deleteFolder(folder)" title="Eliminar Carpeta">
                      <i class="fas fa-trash"></i>
                    </button>
@@ -540,6 +543,26 @@ export class LayerControlComponent implements OnInit {
         this.filterItems();
         this.toastService.show('Carpeta eliminada', 'success');
       }
+    });
+  }
+
+  renameFolder(folder: Folder) {
+    const newName = prompt('Nuevo nombre para la carpeta:', folder.name);
+    if (!newName || newName === folder.name) return;
+
+    this.projectService.updateFolder(folder.id, { name: newName }).subscribe({
+      next: (updatedFolder) => {
+        const project = this.projectContext.getActiveProject();
+        if (project && project.folders) {
+          const idx = project.folders.findIndex(f => f.id === folder.id);
+          if (idx !== -1) {
+            project.folders[idx].name = updatedFolder.name;
+            this.projectContext.setActiveProject(project);
+          }
+        }
+        this.toastService.show('Carpeta renombrada', 'success');
+      },
+      error: () => this.toastService.show('Error al renombrar carpeta', 'error')
     });
   }
 

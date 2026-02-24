@@ -57,6 +57,10 @@ export class ProjectService {
         return this.http.delete(`${this.baseUrl}/folders/${folderId}`);
     }
 
+    updateFolder(folderId: number, data: Partial<Folder>): Observable<Folder> {
+        return this.http.patch<Folder>(`${this.baseUrl}/folders/${folderId}`, data);
+    }
+
     // --- Layers ---
     updateLayer(layerId: number, data: Partial<Layer>): Observable<Layer> {
         return this.http.patch<Layer>(`${this.baseUrl}/layers/${layerId}`, data);

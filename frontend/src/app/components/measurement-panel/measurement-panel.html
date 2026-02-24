@@ -1,0 +1,179 @@
+<div class="measurement-panel-toggle" (click)="panelOpen = !panelOpen"
+    [title]="panelOpen ? 'Cerrar Mediciones' : 'Abrir Mediciones'">
+    <span class="material-icons">straighten</span>
+</div>
+
+<div class="measurement-panel" [class.open]="panelOpen">
+    <div class="panel-header">
+        <h3>Mediciones</h3>
+        <button class="close-btn" (click)="panelOpen = false">×</button>
+    </div>
+
+    <div class="panel-body">
+        <div class="tools">
+            <button class="tool-btn" [class.active]="activeTool === 'length'" (click)="toggleTool('length')"
+                title="Medir Longitud">
+                <span class="material-icons">show_chart</span>
+                Longitud
+            </button>
+            <button class="tool-btn" [class.active]="activeTool === 'area'" (click)="toggleTool('area')"
+                title="Medir Área">
+                <span class="material-icons">pentagon</span>
+                Área
+            </button>
+            <button class="tool-btn" [class.active]="activeTool === 'point'" (click)="toggleTool('point')"
+                title="Punto de Interés / Bandera">
+                <span class="material-icons">flag</span>
+                Marcador
+            </button>
+            <button class="tool-btn" (click)="createNewFolder()" title="Nueva Carpeta">
+                <span class="material-icons">create_new_folder</span>
+                Carpeta
+            </button>
+        </div>
+
+        <div class="measurements-list">
+            <div *ngIf="measurements.length === 0" class="no-measurements">
+                No hay medidas guardadas.
+            </div>
+
+            <!-- Root Measurements -->
+            <div *ngFor="let m of rootMeasurements" class="measurement-item-wrapper">
+                <ng-container *ngTemplateOutlet="measurementItem; context: { $implicit: m }"></ng-container>
+            </div>
+
+            <!-- Folders -->
+            <div *ngFor="let folder of folders" class="folder-group">
+                <div class="folder-header">
+                    <div class="folder-info" (click)="toggleFolder(folder.id)">
+                        <span class="material-icons">{{folderExpanded[folder.id] ? 'expand_more' :
+                            'chevron_right'}}</span>
+                        <span class="material-icons folder-icon">folder</span>
+                        <span class="folder-name">{{folder.name}}</span>
+                    </div>
+                    <div class="folder-actions">
+                        <button class="action-btn-mini" (click)="renameFolder(folder)" title="Renombrar Carpeta">
+                            <span class="material-icons">edit</span>
+                        </button>
+                        <button class="action-btn-mini delete" (click)="deleteFolder(folder)" title="Eliminar Carpeta">
+                            <span class="material-icons">delete</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="folder-content" *ngIf="folderExpanded[folder.id]">
+                    <div *ngFor="let m of getMeasurementsInFolder(folder.id)" class="measurement-item-wrapper">
+                        <ng-container *ngTemplateOutlet="measurementItem; context: { $implicit: m }"></ng-container>
+                    </div>
+                    <div *ngIf="getMeasurementsInFolder(folder.id).length === 0" class="empty-folder">
+                        Sin medidas
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Reusable Item Template -->
+<ng-template #measurementItem let-m>
+    <div class="measurement-item" [class.hidden]="m.visible === false">
+        <div class="m-info">
+            <span class="m-name" [title]="m.name">
+                <span class="material-icons m-type-icon"
+                    *ngIf="m.measurement_type === 'point'">{{getIcon(m.icon)}}</span>
+                {{m.name}}
+            </span>
+            <span class="m-value" *ngIf="m.measurement_type !== 'point'">{{m.measurement_data?.value}}
+                {{m.measurement_data?.unit}}</span>
+            <span class="m-comment" *ngIf="m.description">{{m.description}}</span>
+            <span class="m-link" *ngIf="m.link" (click)="openLink(m.link)">
+                <span class="material-icons">link</span> Ver Enlace
+            </span>
+        </div>
+        <div class="m-actions">
+            <button (click)="toggleVisibility(m)" [title]="m.visible ? 'Ocultar' : 'Mostrar'">
+                <span class="material-icons">{{m.visible === false ? 'visibility_off' : 'visibility'}}</span>
+            </button>
+            <button (click)="zoomTo(m)" title="Zoom a la medida">
+                <span class="material-icons">search</span>
+            </button>
+            <button (click)="editMeasurement(m)" title="Editar">
+                <span class="material-icons">edit</span>
+            </button>
+            <div class="dropdown">
+                <button class="dropbtn"><span class="material-icons">more_vert</span></button>
+                <div class="dropdown-content">
+                    <button (click)="moveToFolder(m, null)">Mover a Raíz</button>
+                    <button *ngFor="let f of folders" (click)="moveToFolder(m, f.id)">Mover a {{f.name}}</button>
+                    <hr>
+                    <button class="delete-link" (click)="deleteMeasurement(m)">Eliminar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</ng-template>
+
+<!-- Modal Edición -->
+<div class="edit-modal" *ngIf="editingMeasurement">
+    <div class="modal-content">
+        <h4>Editar Medida</h4>
+
+        <div class="form-group">
+            <label>Nombre</label>
+            <input type="text" [(ngModel)]="editingMeasurement.name">
+        </div>
+
+        <div class="form-group">
+            <label>{{ editingMeasurement.measurement_type === 'point' ? 'Color del Marcador' : 'Color' }}</label>
+            <input type="color" [(ngModel)]="editingMeasurement.style!.color" (change)="updateFillColor()">
+        </div>
+
+        <div class="form-group" *ngIf="editingMeasurement.measurement_type !== 'point'">
+            <label>Grosor de línea ({{editingMeasurement.style!.stroke_width}}px)</label>
+            <input type="range" min="1" max="10" [(ngModel)]="editingMeasurement.style!.stroke_width">
+        </div>
+
+        <div class="form-group" *ngIf="editingMeasurement.measurement_type === 'point'">
+            <label>Icono del Marcador</label>
+            <div class="icon-selector">
+                <div *ngFor="let icon of availableIcons" class="icon-option"
+                    [class.selected]="editingMeasurement.icon === icon.id" (click)="editingMeasurement.icon = icon.id"
+                    [title]="icon.label">
+                    <span class="material-icons">{{icon.icon}}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Comentario / Nota</label>
+            <textarea [(ngModel)]="editingMeasurement.description" rows="2"
+                placeholder="Escribe un comentario..."></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Enlace / Documento (URL)</label>
+            <input type="text" [(ngModel)]="editingMeasurement.link" placeholder="https://ejemplo.com">
+        </div>
+
+        <div class="form-group" *ngIf="editingMeasurement.measurement_type !== 'point'">
+            <label>Tipo de Línea</label>
+            <select [(ngModel)]="lineTemplate" (change)="updateLineDash()">
+                <option value="solid">Sólida</option>
+                <option value="dashed">Discontinua</option>
+                <option value="dotted">Punteada</option>
+            </select>
+        </div>
+
+        <div class="form-group" *ngIf="editingMeasurement.measurement_type === 'area'">
+            <label class="checkbox-label">
+                <input type="checkbox" [(ngModel)]="editingMeasurement.style!.filled">
+                Polígono Relleno
+            </label>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-cancel" (click)="cancelEdit()">Cancelar</button>
+            <button class="btn-save" (click)="saveEdit()">Guardar</button>
+        </div>
+    </div>
+</div>

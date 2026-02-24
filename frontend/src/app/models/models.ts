@@ -52,3 +52,28 @@ export interface Layer {
     processing_progress?: number;
 }
 
+export interface Measurement {
+    id?: number;
+    name: string;
+    project_id: number;
+    folder_id?: number | null;
+    measurement_type: 'length' | 'area' | 'point';
+    geometry: any;
+    visible?: boolean;
+    description?: string; // Comentario/Nota
+    link?: string;        // Enlace URL
+    icon?: string;        // Tipo de icono (book, build, tree, flag)
+    measurement_data?: {
+        value?: number;
+        unit?: string;
+        perimeter?: number;
+    };
+    style?: {
+        color: string;
+        stroke_width: number;
+        line_dash?: number[];
+        fill_color?: string;
+        filled?: boolean;
+    };
+}
+
