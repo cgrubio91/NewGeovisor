@@ -213,9 +213,12 @@ def update_folder(db: Session, folder_id: int, folder_data: dict):
 def delete_folder(db: Session, folder_id: int):
     db_folder = db.query(Folder).filter(Folder.id == folder_id).first()
     if db_folder:
-        # Desvincular capas y mediciones antes de borrar
+        # Desvincular capas (mantenemos las capas pero sin carpeta)
         db.query(Layer).filter(Layer.folder_id == folder_id).update({Layer.folder_id: None})
-        db.query(Measurement).filter(Measurement.folder_id == folder_id).update({Measurement.folder_id: None})
+        
+        # Eliminar mediciones (cascada real para evitar basura en el mapa)
+        db.query(Measurement).filter(Measurement.folder_id == folder_id).delete()
+        
         db.delete(db_folder)
         db.commit()
     return db_folder
@@ -312,7 +315,10 @@ def create_measurement(db: Session, measurement: MeasurementCreate):
             geometry=func.ST_SetSRID(func.ST_GeomFromGeoJSON(geo_str), 4326),
             measurement_data=measurement.measurement_data,
             style=measurement.style,
-            visible=measurement.visible
+            visible=measurement.visible,
+            description=measurement.description,
+            link=measurement.link,
+            icon=measurement.icon
         )
         
         db.add(db_measurement)

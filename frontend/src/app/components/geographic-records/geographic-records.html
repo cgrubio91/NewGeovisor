@@ -7,6 +7,14 @@
         <p class="subtitle">Filtra registros por proyecto, usuario y rango de fechas para visualizarlos en el mapa</p>
       </div>
       <div class="header-actions">
+        <button class="btn btn-secondary" (click)="syncData()" [disabled]="isLoading" title="Importar proyectos y usuarios desde MongoDB">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <polyline points="1 20 1 14 7 14"></polyline>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+          </svg>
+          Sincronizar Datos
+        </button>
         <button class="btn btn-primary" (click)="downloadReport()" [disabled]="isLoading || records.length === 0">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -52,27 +60,34 @@
 
       <div class="filter-group">
         <label for="proyecto">🏗️ Proyecto (opcional)</label>
-        <select 
+        <input 
+          list="projectList"
           id="proyecto" 
           formControlName="proyecto"
           class="input-field"
+          placeholder="Escribe para buscar proyecto..."
         >
-          <option value="">-- Todos los proyectos --</option>
-          <option *ngFor="let project of projects" [value]="project.id || project._id">
-            {{ project.name }}
+        <datalist id="projectList">
+          <option *ngFor="let project of projects" [value]="project.name">
+            {{ project.id || project._id }}
           </option>
-        </select>
+        </datalist>
       </div>
 
       <div class="filter-group">
         <label for="usuario">👤 Usuario (opcional)</label>
         <input 
-          type="text" 
+          list="userList"
           id="usuario" 
           formControlName="usuario"
           class="input-field"
-          placeholder="Nombre o email del usuario"
+          placeholder="Escribe para buscar usuario..."
         >
+        <datalist id="userList">
+          <option *ngFor="let user of users" [value]="user.email">
+            {{ user.full_name }}
+          </option>
+        </datalist>
       </div>
 
       <div class="filter-group">
@@ -165,17 +180,17 @@
             </tr>
           </thead>
           <tbody>
-            <tr *ngFor="let record of records; let i = index" [class.has-coords]="(record.coords || record.coordinates_google)">
+            <tr *ngFor="let record of records; let i = index" [class.has-coords]="record.coords">
               <td>{{ i + 1 }}</td>
-              <td>{{ record.user || 'N/A' }}</td>
-              <td>{{ record.date || 'N/A' }}</td>
-              <td>{{ record.format || 'N/A' }}</td>
-              <td>{{ record.project_id || 'N/A' }}</td>
-              <td class="coords-cell" *ngIf="record.coords || record.coordinates_google">
+              <td>{{ record['Colaborador'] || record['user_email'] || 'N/A' }}</td>
+              <td>{{ record['Fecha del registro'] || 'N/A' }}</td>
+              <td>{{ record['Formato'] || 'N/A' }}</td>
+              <td>{{ record['Proyecto'] || 'N/A' }}</td>
+              <td class="coords-cell" *ngIf="record.coords">
                 <span class="badge">📍</span>
-                {{ record.coordinates_google || (record.coords?.lat + ',' + record.coords?.lon) }}
+                {{ record['Coordenadas_Google'] || (record.coords?.lat + ', ' + record.coords?.lon) }}
               </td>
-              <td class="coords-cell" *ngIf="!record.coords && !record.coordinates_google">
+              <td class="coords-cell" *ngIf="!record.coords">
                 <span class="badge-empty">-</span>
               </td>
               <td>

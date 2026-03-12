@@ -6,6 +6,7 @@ import { MapService } from '../../services/map.service';
 import { GeographicRecordsService, GeoRecord, ReportResponse } from '../../services/geographic-records.service';
 import { ProjectService } from '../../services/project.service';
 import { ToastService } from '../../services/toast.service';
+import { MeasurementService } from '../../services/measurement.service';
 import { finalize, Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import OlMap from 'ol/Map';
@@ -50,6 +51,9 @@ export class GeographicRecordsComponent implements OnInit, OnDestroy {
   private toastService = inject(ToastService);
   private formBuilder = inject(FormBuilder);
   private router = inject(Router);
+  private measurementService = inject(MeasurementService);
+
+  // Filtros
   private destroy$ = new Subject<void>();
   private map: OlMap | null = null;
 
@@ -59,7 +63,8 @@ export class GeographicRecordsComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.initializeForm();
-    this.loadProjectsAndUsers();
+    this.loadProjects();
+    this.loadUsers();
     
     // Suscribirse al mapa cuando esté disponible
     this.mapService.map$
@@ -98,17 +103,62 @@ export class GeographicRecordsComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Carga proyectos y usuarios para los select
+   * Carga proyectos directamente de MongoDB (Segmab)
    */
-  private loadProjectsAndUsers() {
-    this.projectService.getProjects()
+  private loadProjects() {
+    this.geoService.getMongoDBProjects()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (projects) => {
-          this.projects = projects;
+          // Normalizar IDs de MongoDB (pueden venir como objeto o string)
+          this.projects = projects.map(p => ({
+            ...p,
+            id: p._id // El template usa project.id
+          }));
         },
         error: (err) => {
-          console.error('Error loading projects:', err);
+          console.error('Error loading MongoDB projects:', err);
+          this.toastService.show('Error al cargar proyectos de MongoDB', 'error');
+        }
+      });
+  }
+
+  /**
+   * Carga usuarios de PostgreSQL para el filtro
+   */
+  private loadUsers() {
+    this.geoService.getUsers()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (users) => {
+          this.users = users;
+        },
+        error: (err) => {
+          console.error('Error loading users:', err);
+        }
+      });
+  }
+
+  /**
+   * Sincroniza proyectos y usuarios de MongoDB a PostgreSQL
+   */
+  syncData() {
+    this.isLoading = true;
+    this.geoService.syncMongoDBData()
+      .pipe(
+        finalize(() => this.isLoading = false),
+        takeUntil(this.destroy$)
+      )
+      .subscribe({
+        next: (response) => {
+          const res = response.results;
+          this.toastService.show(
+            `Sincronización exitosa: ${res.projects_created} proyectos, ${res.users_created} usuarios.`,
+            'success'
+          );
+        },
+        error: (err) => {
+          this.toastService.show('Error en la sincronización de datos', 'error');
         }
       });
   }
@@ -139,10 +189,17 @@ export class GeographicRecordsComponent implements OnInit, OnDestroy {
     this.recordsForMap = [];
     this.selectedRecordIndex = null;
 
+    // Obtener ID del proyecto desde el datalist (si el usuario escribió el nombre, buscamos el ID)
+    let projectId = formValue.proyecto;
+    const selectedProject = this.projects.find(p => p.name === formValue.proyecto || p.id === formValue.proyecto || p._id === formValue.proyecto);
+    if (selectedProject) {
+      projectId = selectedProject.id || selectedProject._id;
+    }
+
     this.geoService.getRecordsForMap(
       formValue.fechaInicio,
       formValue.fechaFin,
-      formValue.proyecto,
+      projectId,
       formValue.usuario,
       formValue.nombreProyecto
     )
@@ -200,40 +257,40 @@ export class GeographicRecordsComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Carga los registros en el mapa
+   * Carga los registros filtrados en el sistema de mediciones
    */
-  loadToMap() {
-    if (!this.map) {
-      this.toastService.show('El mapa no está disponible', 'warning');
-      return;
-    }
-
+  async loadToMap() {
     if (this.recordsForMap.length === 0) {
       this.toastService.show('No hay registros con coordenadas para mostrar', 'warning');
       return;
     }
 
-    // Convertir registros a GeoJSON
-    const geoJson = this.geoService.recordsToGeoJSON(this.recordsForMap);
+    this.isLoading = true;
+    const now = new Date();
+    const dia = String(now.getDate()).padStart(2, '0');
+    const folderName = `Consulta día ${dia} (${now.toLocaleTimeString()})`;
 
-    // Agregar capa al mapa
-    this.mapService.addVectorLayer(
-      'Registros Geográficos',
-      geoJson,
-      999999, // ID único
-      null // Sin folder
-    );
+    try {
+      this.toastService.show(`Creando carpeta y ${this.recordsForMap.length} marcadores...`, 'info');
+      
+      await this.measurementService.importRecordsAsMeasurements(this.recordsForMap, folderName);
+      
+      this.toastService.show(
+        `Se ha creado la carpeta "${folderName}" en mediciones con los marcadores.`,
+        'success'
+      );
 
-    this.showMap = true;
-    this.toastService.show(
-      `${this.recordsForMap.length} registros agregados al mapa`,
-      'success'
-    );
+      // Navegar automáticamente al visor para ver los resultados
+      setTimeout(() => {
+        this.router.navigate(['/map']);
+      }, 500);
 
-    // Navegar a la vista del mapa
-    setTimeout(() => {
-      this.router.navigate(['/map']);
-    }, 500);
+    } catch (error) {
+      console.error('Error al cargar a mediciones:', error);
+      this.toastService.show('Error al importar registros al sistema de mediciones', 'error');
+    } finally {
+      this.isLoading = false;
+    }
   }
 
   /**

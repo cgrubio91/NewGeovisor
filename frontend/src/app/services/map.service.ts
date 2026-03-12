@@ -31,11 +31,14 @@ export class MapService {
     private map!: OlMap;
     private layers: any[] = [];
     private loadingLayers = new Set<number | string>();
+    private recordsGeoJSON: any = null; // Persistencia de registros
+    private recordsLayerId: string = 'registros_temporales_9999';
     public layersChanged = new BehaviorSubject<any[]>([]);
     public compareToolTrigger = new Subject<string | number | null>();
 
     private mapSubject = new BehaviorSubject<OlMap | null>(null);
     public map$ = this.mapSubject.asObservable().pipe(filter(m => !!m)) as Observable<OlMap>;
+    private mapReady = new BehaviorSubject<boolean>(false); // Added for map readiness notification
 
     constructor() { }
 
@@ -54,6 +57,45 @@ export class MapService {
      * @returns Instancia del mapa creado
      */
     initMap(target: string) {
+        if (this.map) {
+            // Save all non-base layers before destroying
+            const savedLayers = this.map.getLayers().getArray()
+                .filter((l: any) => l.get('type') !== 'base')
+                .slice(); // clone the array
+
+            // Destroy old target first to cleanly detach OL canvas
+            this.map.setTarget(undefined);
+
+            // Create the new map on the fresh DOM element
+            this.map = new OlMap({
+                target: target,
+                layers: [
+                    new TileLayer({
+                        source: new OSM(),
+                        properties: { name: 'Mapa (OSM)', id: 'osm', type: 'base' }
+                    }),
+                    new TileLayer({
+                        source: new XYZ({
+                            url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                            maxZoom: 19
+                        }),
+                        visible: false,
+                        properties: { name: 'Satélite', id: 'satellite', type: 'base' }
+                    }),
+                    ...savedLayers
+                ],
+                view: this.map.getView() // Preserve current view/zoom
+            });
+
+            this.mapSubject.next(this.map);
+            this.updateLayerList();
+            // Re-add records layer if it was cached
+            if (this.recordsGeoJSON) {
+                this.addVectorLayer('Registros Filtrados', this.recordsGeoJSON, 9999);
+            }
+            return this.map;
+        }
+
         this.map = new OlMap({
             target: target,
             layers: [
@@ -79,6 +121,10 @@ export class MapService {
 
         this.mapSubject.next(this.map);
         this.updateLayerList();
+        // Re-add records layer if it was cached
+        if (this.recordsGeoJSON) {
+            this.addVectorLayer('Registros Filtrados', this.recordsGeoJSON, 9999);
+        }
         return this.map;
     }
 
@@ -86,6 +132,10 @@ export class MapService {
      * Agrega una nueva capa al mapa
      */
     addLayer(layer: any, type: string = 'raster') {
+        if (!this.map) {
+            console.warn('MapService: Intentando añadir capa pero el mapa no está inicializado');
+            return;
+        }
         layer.set('type', type);
         this.map.addLayer(layer);
         this.updateLayerList();
@@ -128,10 +178,12 @@ export class MapService {
         }
     }
 
-    /**
-     * Agrega una capa vector (GeoJSON)
-     */
     addVectorLayer(name: string, geojson: any, id?: number, folderId?: number | null) {
+        // Si es la capa de registros (ID 9999), guardarla para persistencia
+        if (id === 9999) {
+            this.recordsGeoJSON = geojson;
+        }
+
         const vectorSource = new VectorSource({
             features: new GeoJSON().readFeatures(geojson, {
                 dataProjection: 'EPSG:4326',
@@ -139,6 +191,7 @@ export class MapService {
             })
         });
 
+        // Crear la capa
         const vectorLayer = new VectorLayer({
             source: vectorSource,
             style: (feature) => this.getKMLStyle(feature),
@@ -150,8 +203,20 @@ export class MapService {
             }
         });
 
-        this.addLayer(vectorLayer, 'vector');
-        this.zoomToExtent(vectorSource.getExtent(), 'EPSG:3857');
+        // Intentar añadir solo si el mapa existe
+        if (this.map) {
+            this.addLayer(vectorLayer, 'vector');
+            if (vectorSource.getFeatures().length > 0) {
+                this.zoomToExtent(vectorSource.getExtent(), 'EPSG:3857');
+            }
+        } else {
+            console.log('MapService: Mapa no listo, capa guardada en cache para inicio posterior.');
+        }
+    }
+
+    clearRecordsLayer() {
+        this.recordsGeoJSON = null;
+        this.removeLayer(9999);
     }
 
     getLayerById(id: string | number) {
@@ -293,23 +358,24 @@ export class MapService {
     }
 
     private getKMLStyle(feature: any) {
-        const name = feature.get('name') || '';
+        const name = feature.get('name') || feature.get('title') || '';
+        const featureColor = feature.get('color') || '#00ffff'; // Color desde propiedad o cyan por defecto
 
         return new Style({
-            // Relleno: Verde Lima con buena opacidad
-            fill: new Fill({ color: 'rgba(50, 205, 50, 0.6)' }),
+            // Relleno: basado en featureColor si existe
+            fill: new Fill({ color: featureColor + '99' }), // Añadir transparencia 99hex (~60%)
 
-            // Líneas: Gris oscuro para máximo contraste sobre el mapa
+            // Líneas: Gris oscuro
             stroke: new Stroke({ color: '#333333', width: 2.5 }),
 
-            // Puntos: Círculo Cyan con borde negro
+            // Puntos: Reflejan el color de la clasificación
             image: new CircleStyle({
                 radius: 6,
-                fill: new Fill({ color: '#00ffff' }),
+                fill: new Fill({ color: featureColor }),
                 stroke: new Stroke({ color: '#000000', width: 2 })
             }),
 
-            // Texto: Legible con borde negro
+            // Texto: Legible
             text: new Text({
                 text: name,
                 font: 'bold 12px "Outfit", sans-serif',

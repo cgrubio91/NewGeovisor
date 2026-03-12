@@ -320,6 +320,8 @@ class GeographicRecordsAnalyzer:
                     
                     # Agregar al resultado
                     results.append({
+                        "id": id_reg,
+                        "project_id": pid,
                         "Proyecto": doc.get('name_project', 'N/A'),
                         "Colaborador": doc.get('display_name') or doc.get('user_email', 'N/A'),
                         "Cargo": doc.get('cargo') or "No definido",
@@ -373,6 +375,71 @@ class GeographicRecordsAnalyzer:
         self.cache_obra.clear()
         self.cache_oficina.clear()
         logger.info("Cache de geocercas limpiado")
+    
+    def obtener_proyectos_mongodb(self) -> List[Dict[str, Any]]:
+        """
+        Obtiene la lista de todos los proyectos desde MongoDB.
+        """
+        try:
+            with SSHTunnelForwarder(
+                (self.ssh_host, 22),
+                ssh_username=self.ssh_user,
+                ssh_pkey=self.ssh_key_path,
+                ssh_private_key_password=self.ssh_passphrase.encode() 
+                    if isinstance(self.ssh_passphrase, str) else self.ssh_passphrase,
+                remote_bind_address=('127.0.0.1', self.mongo_port),
+                set_keepalive=30.0
+            ) as server:
+                client = MongoClient('127.0.0.1', server.local_bind_port)
+                db = client[self.db_name]
+                
+                projects = list(db.projects.find({}, {"name": 1, "description": 1, "owner": 1}))
+                for p in projects:
+                    p["_id"] = str(p["_id"])
+                
+                client.close()
+                return projects
+        except Exception as e:
+            logger.error(f"Error obteniendo proyectos de MongoDB: {str(e)}")
+            return []
+
+    def obtener_usuarios_y_proyectos(self) -> List[Dict[str, Any]]:
+        """
+        Obtiene usuarios y sus relaciones con proyectos desde MongoDB.
+        Esta lógica depende de cómo Segmab almacene los permisos. 
+        Asumiendo esquema estándar donde el usuario tiene 'projects' (IDs).
+        """
+        try:
+            with SSHTunnelForwarder(
+                (self.ssh_host, 22),
+                ssh_username=self.ssh_user,
+                ssh_pkey=self.ssh_key_path,
+                ssh_private_key_password=self.ssh_passphrase.encode() 
+                    if isinstance(self.ssh_passphrase, str) else self.ssh_passphrase,
+                remote_bind_address=('127.0.0.1', self.mongo_port),
+                set_keepalive=30.0
+            ) as server:
+                client = MongoClient('127.0.0.1', server.local_bind_port)
+                db = client[self.db_name]
+                
+                # Obtener usuarios con sus campos básicos y lista de proyectos
+                users = list(db.users.find({}, {
+                    "email": 1, 
+                    "displayName": 1, 
+                    "organizations": 1,
+                    "projects": 1  # Asumimos que aquí están los IDs de proyectos
+                }))
+                
+                for u in users:
+                    u["_id"] = str(u["_id"])
+                    if "projects" in u and isinstance(u["projects"], list):
+                        u["projects"] = [str(pid) for pid in u["projects"]]
+                
+                client.close()
+                return users
+        except Exception as e:
+            logger.error(f"Error obteniendo usuarios de MongoDB: {str(e)}")
+            return []
 
 
 def crear_analizador_desde_env(kml_base_path: str = "uploads") -> GeographicRecordsAnalyzer:

@@ -28,12 +28,13 @@ export class ApiService {
     /**
      * Carga archivos al servidor asociados a un proyecto con seguimiento de progreso
      */
-    uploadFiles(files: File[], projectId: number, folderId?: number): Observable<HttpEvent<any>> {
+    uploadFiles(files: File[], projectId: number, folderId?: number, geofenceType: string = 'ninguno'): Observable<HttpEvent<any>> {
         const formData = new FormData();
         files.forEach(file => {
             formData.append('files', file, file.name);
         });
         formData.append('project_id', projectId.toString());
+        formData.append('geofence_type', geofenceType);
         if (folderId) {
             formData.append('folder_id', folderId.toString());
         }

@@ -573,16 +573,16 @@ def process_3d_pipeline(file_path: str, layer_id: int):
 # --- UPLOAD ENDPOINT ---
 @app.post("/upload")
 async def upload_files(
+    background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(...), 
     project_id: int = Form(...),
     folder_id: Optional[int] = Form(None),
-    background_tasks: BackgroundTasks = None, ### Add optional to avoid required arg issues if not provided by client? No, FastAPI injects it.
+    geofence_type: Optional[str] = Form("ninguno"), # 'intervencion', 'oficina', 'ninguno'
     db: Session = Depends(get_db),
     current_user: models.User = Depends(check_role(['administrador', 'director']))
 ):
     """
     Endpoint para subir archivos geoespaciales de múltiples formatos.
-    Soporta: TIFF, GeoTIFF, LAS, LAZ, OBJ, DWG, DXF, KMZ, KML, SHP, y más.
     """
     from file_processor import file_processor
     
@@ -593,10 +593,25 @@ async def upload_files(
     if db_project.owner_id != current_user.id and current_user not in db_project.assigned_users:
         raise HTTPException(status_code=403, detail="Access denied to this project")
 
+    # Obtener el pid de MongoDB para el nombre del archivo si es geocerca
+    # Si no tiene mongo_id, usamos el ID de postgres como fallback
+    mongo_pid = db_project.mongodb_id or str(db_project.id)
+    
     uploaded_files = []
     for file in files:
         filename = file.filename
-        file_path = os.path.join(UPLOAD_DIR, filename)
+        ext = os.path.splitext(filename)[1].lower()
+        
+        # Lógica especial para Geocercas (KML/KMZ)
+        if geofence_type in ["intervencion", "oficina"] and ext in [".kml", ".kmz"]:
+            suffix = "_oficina" if geofence_type == "oficina" else ""
+            # Si es intervención, no lleva sufijo para mantener compatibilidad con el código anterior
+            filename = f"{mongo_pid}{suffix}{ext}"
+            geofence_dir = "kml_proyectos"
+            os.makedirs(geofence_dir, exist_ok=True)
+            file_path = os.path.normpath(os.path.join(geofence_dir, filename))
+        else:
+            file_path = os.path.normpath(os.path.join(UPLOAD_DIR, filename))
         
         # Evitar sobrescribir archivos existentes
         counter = 1
@@ -1046,33 +1061,36 @@ async def generar_reporte_registros(
         
         logger.info(f"Generando reporte: {fecha_inicio} - {fecha_fin} (usuario: {current_user.username})")
         
-        # Si se recibe pid_filtro (ID de PostgreSQL), resolver el nombre del proyecto
-        proyecto_nombre_para_mongo = None
+        # Si se recibe pid_filtro, determinar si es un ID de PostgreSQL o MongoDB
+        mongo_pid = None
+        nombre_proyecto_filtro = request.nombre_proyecto_filtro
+        
         if request.pid_filtro:
-            try:
-                # Buscar proyecto en PostgreSQL
-                proyecto = db.query(models.Project).filter(models.Project.id == request.pid_filtro).first()
-                if proyecto:
-                    proyecto_nombre_para_mongo = proyecto.name
-                    logger.info(f"Proyecto PostgreSQL ID {request.pid_filtro} → Nombre: '{proyecto_nombre_para_mongo}'")
-                else:
-                    logger.warning(f"Proyecto PostgreSQL ID {request.pid_filtro} no encontrado")
-            except Exception as e:
-                logger.error(f"Error al resolver proyecto: {str(e)}")
+            # Si es un ID numérico (PostgreSQL), intentamos resolver el nombre
+            pid_str = str(request.pid_filtro)
+            if pid_str.isdigit():
+                try:
+                    proyecto = db.query(models.Project).filter(models.Project.id == int(request.pid_filtro)).first()
+                    if proyecto:
+                        nombre_proyecto_filtro = proyecto.name
+                        logger.info(f"Proyecto PostgreSQL ID {request.pid_filtro} → Nombre: '{nombre_proyecto_filtro}'")
+                except Exception as e:
+                    logger.error(f"Error al resolver proyecto PostgreSQL: {str(e)}")
+            else:
+                # Si no es numérico, asumimos que es un ID de MongoDB (o un string/hex)
+                mongo_pid = request.pid_filtro
+                logger.info(f"Usando ID de MongoDB directamente: {mongo_pid}")
         
-        # Usar el nombre del proyecto para buscar en MongoDB
-        nombre_proyecto_filtro = proyecto_nombre_para_mongo or request.nombre_proyecto_filtro
-        
-        # Crear analizador
-        analizador = crear_analizador_desde_env(kml_base_path="uploads")
+        # Crear analizador apuntando a la carpeta de geocercas correcta
+        analizador = crear_analizador_desde_env(kml_base_path="kml_proyectos")
         
         # Generar reporte
         df = analizador.generar_reporte(
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
-            pid_filtro=None,  # NO usar pid_filtro directo (es ID de PostgreSQL, no MongoDB)
+            pid_filtro=mongo_pid,  # Pasar el ID de MongoDB si existe
             user_filtro=request.user_filtro,
-            nombre_proyecto_filtro=nombre_proyecto_filtro  # Usar nombre del proyecto para buscar en MongoDB
+            nombre_proyecto_filtro=nombre_proyecto_filtro
         )
         
         if len(df) == 0:
@@ -1099,36 +1117,39 @@ async def generar_reporte_registros(
         }
         
         # Convertir DataFrame a registros para el frontend
-        # Normalizar nombres de columnas para que sean accesibles desde el frontend
         records = []
         for _, row in df.iterrows():
             record = {}
+            # Primero pasar todos los campos originales del DF
             for col in df.columns:
-                # Intentar parsear coordenadas si están en formato string
-                if col in ["coordinates_google", "Coordenadas_Google"]:
-                    coords_str = str(row[col]) if pd.notna(row[col]) else ""
-                    # Intentar extraer lat/lon del string "lat,lon"
-                    try:
-                        if "," in coords_str and coords_str != "":
-                            parts = coords_str.split(",")
-                            lat = float(parts[0].strip())
-                            lon = float(parts[1].strip())
-                            record["coordinates_google"] = coords_str
-                            record["coords"] = {"lat": lat, "lon": lon}
-                        else:
-                            record[col] = row[col]
-                    except:
-                        record[col] = row[col]
+                value = row[col]
+                if pd.isna(value):
+                    record[col] = None
+                elif isinstance(value, (datetime, pd.Timestamp)):
+                    record[col] = value.strftime("%Y-%m-%d %H:%M:%S")
+                elif isinstance(value, (int, float)):
+                    record[col] = float(value)
                 else:
-                    # Convertir valores NaN a None para JSON
-                    value = row[col]
-                    if pd.isna(value):
-                        record[col] = None
-                    elif isinstance(value, (int, float)):
-                        record[col] = float(value) if isinstance(value, (int, float)) else value
-                    else:
-                        record[col] = str(value)
+                    record[col] = str(value)
             
+            # Especiales para el mapeo geoespacial del frontend
+            # Si tiene Coordenadas_Google, intentamos crear el objeto coords
+            if "Coordenadas_Google" in record and record["Coordenadas_Google"]:
+                try:
+                    parts = record["Coordenadas_Google"].split(",")
+                    record["coords"] = {
+                        "lat": float(parts[0].strip()),
+                        "lon": float(parts[1].strip())
+                    }
+                except:
+                    pass
+            
+            # Asegurar que project_id y _id estén presentes para el link
+            if "project_id" in record:
+                record["project_id"] = record["project_id"]
+            if "id" in record:
+                record["_id"] = record["id"] # El frontend usa _id a veces
+                
             records.append(record)
         
         # Limpiar cache
@@ -1217,6 +1238,148 @@ async def obtener_info_analizador():
             "status": "error",
             "mensaje": f"Error obteniendo información: {str(e)}"
         }
+
+@app.get("/api/v1/geographic-records/mongodb-projects")
+async def get_mongodb_projects(
+    current_user: models.User = Depends(get_current_user)
+):
+    """Obtiene la lista de proyectos directamente de MongoDB (Segmab)"""
+    try:
+        analizador = crear_analizador_desde_env()
+        projects = analizador.obtener_proyectos_mongodb()
+        return projects
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/geographic-records/sync-mongodb-data")
+async def sync_mongodb_data(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(check_role(['administrador']))
+):
+    """
+    Sincroniza proyectos y usuarios de MongoDB a PostgreSQL (Geovisor).
+    Crea los proyectos si no existen e importa los usuarios asignándoles acceso.
+    Utiliza mongodb_id para evitar duplicados.
+    """
+    try:
+        analizador = crear_analizador_desde_env()
+        
+        # 1. Obtener datos de MongoDB
+        mongo_projects = analizador.obtener_proyectos_mongodb()
+        mongo_users = analizador.obtener_usuarios_y_proyectos()
+        
+        results = {
+            "projects_created": 0,
+            "projects_updated": 0,
+            "users_created": 0,
+            "users_updated": 0,
+            "assignments_created": 0,
+            "errors": []
+        }
+        
+        # Map to store mongo_project_id -> postgres_project_id
+        project_map = {}
+        
+        # 2. Sincronizar Proyectos
+        for m_proy in mongo_projects:
+            m_id = str(m_proy["_id"])
+            name = m_proy.get("name", "Sin nombre")
+            description = m_proy.get("description", "")
+            
+            # Buscar por mongodb_id preferiblemente, luego por nombre (migración)
+            db_proy = db.query(models.Project).filter(
+                (models.Project.mongodb_id == m_id) | (models.Project.name == name)
+            ).first()
+            
+            if not db_proy:
+                # Crear proyecto
+                new_proy = models.Project(
+                    name=name,
+                    description=description,
+                    owner_id=current_user.id,
+                    mongodb_id=m_id
+                )
+                db.add(new_proy)
+                db.flush() 
+                db_proy = new_proy
+                results["projects_created"] += 1
+            else:
+                # Actualizar si ya existe
+                db_proy.mongodb_id = m_id
+                if not db_proy.description:
+                    db_proy.description = description
+                results["projects_updated"] += 1
+            
+            project_map[m_id] = db_proy.id
+        
+        # 3. Sincronizar Usuarios y Asignaciones
+        for m_user in mongo_users:
+            email = m_user.get("email")
+            display_name = m_user.get("displayName", "")
+            m_projects = m_user.get("projects", [])
+            m_u_id = str(m_user.get("_id", ""))
+            
+            if not email:
+                continue
+            
+            # Limpiar email
+            email = email.strip().rstrip('_').strip()
+            if not email or '@' not in email:
+                continue
+                
+            # Buscar por mongodb_id o email
+            db_user = db.query(models.User).filter(
+                (models.User.mongodb_id == m_u_id) | (models.User.email == email)
+            ).first()
+            
+            if not db_user:
+                # Crear usuario
+                import uuid
+                user_in = schemas.UserCreate(
+                    email=email,
+                    username=email.split('@')[0],
+                    full_name=display_name,
+                    password=str(uuid.uuid4())[:12],
+                    role="usuario"
+                )
+                db_user = crud.create_user(db, user_in)
+                db_user.mongodb_id = m_u_id
+                results["users_created"] += 1
+            else:
+                # Actualizar mongodb_id
+                db_user.mongodb_id = m_u_id
+                if not db_user.full_name:
+                    db_user.full_name = display_name
+                results["users_updated"] += 1
+            
+            db.flush()
+            
+            # Asignar proyectos
+            for m_pid in m_projects:
+                m_pid_str = str(m_pid)
+                if m_pid_str in project_map:
+                    p_id = project_map[m_pid_str]
+                    # Verificar si ya está asignado
+                    is_assigned = db.query(models.user_projects).filter(
+                        models.user_projects.c.user_id == db_user.id,
+                        models.user_projects.c.project_id == p_id
+                    ).first()
+                    
+                    if not is_assigned:
+                        crud.assign_user_to_project(db, db_user.id, p_id)
+                        results["assignments_created"] += 1
+        
+        db.commit()
+        return {
+            "status": "success",
+            "message": "Sincronización completada exitosamente",
+            "results": results
+        }
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error en sincronización: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

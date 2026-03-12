@@ -28,6 +28,9 @@ class User(Base):
     # Nuevos campos para métricas
     login_count = Column(Integer, default=0)
     last_login = Column(DateTime(timezone=True), nullable=True)
+    
+    # Referencia a MongoDB
+    mongodb_id = Column(String, unique=True, index=True, nullable=True)
 
     # Relaciones
     owned_projects = relationship("Project", back_populates="owner", cascade="all, delete-orphan")
@@ -46,6 +49,9 @@ class Project(Base):
     
     # Nuevo campo para métricas
     visit_count = Column(Integer, default=0)
+    
+    # Referencia a MongoDB
+    mongodb_id = Column(String, unique=True, index=True, nullable=True)
     
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -108,6 +114,9 @@ class Layer(Base):
     processing_status = Column(String, default="completed", nullable=True)
     # Porcentaje 0-100
     processing_progress = Column(Integer, default=100, nullable=True)
+
+    # Tipo de geocerca: 'intervencion', 'oficina', 'ninguno'
+    geofence_type = Column(String, default="ninguno", nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

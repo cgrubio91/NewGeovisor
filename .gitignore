@@ -123,7 +123,20 @@ htmlcov/
 tile_cache/
 
 # ========================================
+# REPORTES Y DOCUMENTOS GENERADOS
+# ========================================
+# Reportes de excel y archivos de datos
+backend/report/
+report/
+*.xlsx
+*.xls
+*.csv
+*.pdf
+
+# ========================================
 # DOCKER
 # ========================================
 # No ignorar Dockerfiles, pero sí volúmenes locales
 postgres_data/
+mongo_data/
+redis_data/

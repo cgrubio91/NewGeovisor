@@ -54,8 +54,8 @@ import { Layer, Folder } from '../../models/models';
               </ng-container>
             </div>
 
-            <!-- Folders -->
-            <div class="folder-item" *ngFor="let folder of folders; trackBy: trackFolder">
+            <!-- Folders (Only show if they have layers) -->
+            <div class="folder-item" *ngFor="let folder of folders; trackBy: trackFolder" [hidden]="getLayersInFolder(folder.id).length === 0">
               <div class="folder-header" (click)="toggleFolder(folder)">
                 <i class="fas" [class.fa-chevron-down]="folderExpanded[folder.id]" [class.fa-chevron-right]="!folderExpanded[folder.id]"></i>
                 <i class="fas fa-folder"></i>

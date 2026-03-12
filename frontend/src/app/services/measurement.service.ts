@@ -5,6 +5,7 @@ import { ProjectContextService } from './project-context.service';
 import { Measurement } from '../models/models';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, firstValueFrom, combineLatest } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 import Draw from 'ol/interaction/Draw';
 import VectorSource from 'ol/source/Vector';
@@ -461,6 +462,7 @@ export class MeasurementService {
             await this.loadMeasurements(this.activeProject_id!);
         } catch (error) {
             console.error('Error updating measurement:', error);
+            throw error;
         }
     }
 
@@ -489,6 +491,89 @@ export class MeasurementService {
             else if (error.status === 500) msg += ' Error interno del servidor al generar el archivo.';
 
             alert(msg);
+        }
+    }
+
+    /**
+     * Importa una lista de registros geográficos como mediciones reales en una subcarpeta
+     */
+    async importRecordsAsMeasurements(records: any[], folderName: string): Promise<void> {
+        if (!this.activeProject_id || records.length === 0) return;
+
+        try {
+            // 1. Crear la carpeta
+            const folder = await firstValueFrom(
+                this.http.post<any>(`${this.api.getApiUrl()}/folders/`, {
+                    name: folderName,
+                    project_id: this.activeProject_id
+                })
+            );
+
+            console.log(`[MeasurementService] Carpeta '${folderName}' creada:`, folder);
+
+            // 2. Crear las mediciones para cada registro
+            const promises = records.map(record => {
+                // Obtener coordenadas analizando el string de Google o el objeto coords
+                let lat = record['Norte (Lat)'] || (record.coords ? record.coords.lat : null);
+                let lon = record['Este (Lon)'] || (record.coords ? record.coords.lon : null);
+                
+                if (lat === null || lon === null || isNaN(lat) || isNaN(lon)) return Promise.resolve();
+
+                // --- Lógica de Semáforo ---
+                // Verde (#4caf50): Obra / Área intervención
+                // Amarillo (#ffeb3b): Oficina
+                // Rojo (#f44336): Ubicación externa
+                const clasif = (record['Clasificación'] || '').toLowerCase();
+                let markerColor = '#f44336'; // Rojo por defecto
+                
+                if (clasif.includes('obra')) {
+                    markerColor = '#4caf50';
+                } else if (clasif.includes('oficina')) {
+                    markerColor = '#ffeb3b';
+                }
+
+                // --- Título y Metadata (usando llaves exactas del backend) ---
+                const fechaStr = record['Fecha del registro'] || 'S/F';
+                const formatoStr = record['Formato'] || 'S/F';
+                const colaborador = record['Colaborador'] || 'Desconocido';
+                const link = record['URL Registro'] || null;
+
+                const measurement: any = {
+                    name: `${fechaStr} - ${formatoStr}`,
+                    project_id: this.activeProject_id,
+                    folder_id: folder.id,
+                    measurement_type: 'point',
+                    description: `Colaborador: ${colaborador}\nClasificación: ${record['Clasificación'] || 'N/A'}`,
+                    geometry: {
+                        type: 'Point',
+                        coordinates: [lon, lat]
+                    },
+                    icon: 'flag',
+                    link: link,
+                    style: {
+                        color: markerColor,
+                        stroke_width: 2,
+                        filled: true
+                    }
+                };
+
+                return firstValueFrom(this.http.post(`${this.api.getApiUrl()}/measurements`, measurement));
+            });
+
+            await Promise.all(promises);
+            console.log(`[MeasurementService] ${records.length} registros procesados.`);
+
+            // 3. Notificar cambios y recargar proyecto (por sus carpetas)
+            await this.loadMeasurements(this.activeProject_id);
+            
+            const updatedProject = await firstValueFrom(
+                this.http.get<any>(`${this.api.getApiUrl()}/projects/by-id/${this.activeProject_id}`)
+            );
+            this.projectContext.setActiveProject(updatedProject);
+
+        } catch (error) {
+            console.error('Error importing records:', error);
+            throw error;
         }
     }
 }

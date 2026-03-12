@@ -43,6 +43,22 @@ import { HttpEventType } from '@angular/common/http';
           </select>
         </div>
 
+        <!-- Geofence Type Selection (KML/KMZ specific) -->
+        <div class="geofence-selector" *ngIf="hasKmlFiles()">
+          <label>Clasificación de Geocerca (KML):</label>
+          <div class="radio-group">
+            <label class="radio-item">
+              <input type="radio" [(ngModel)]="geofenceType" value="ninguno"> Ninguna
+            </label>
+            <label class="radio-item">
+              <input type="radio" [(ngModel)]="geofenceType" value="intervencion"> Área Intervención
+            </label>
+            <label class="radio-item">
+              <input type="radio" [(ngModel)]="geofenceType" value="oficina"> Área Oficina
+            </label>
+          </div>
+        </div>
+
         <div class="file-input-wrapper">
           <input 
             type="file" 
@@ -96,7 +112,7 @@ import { HttpEventType } from '@angular/common/http';
               <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
               <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
             </svg>
-            <span>Subiendo byte a byte... {{ uploadProgress }}%</span>
+            <span>Subiendo... {{ uploadProgress }}%</span>
           } @else {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -283,6 +299,42 @@ import { HttpEventType } from '@angular/common/http';
       outline: none;
     }
 
+    .geofence-selector {
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+      background: rgba(0, 193, 210, 0.1);
+      border-radius: 8px;
+    }
+
+    .geofence-selector label {
+      font-size: 0.8rem;
+      color: var(--color-primary-cyan);
+      font-weight: 600;
+    }
+
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .radio-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: white;
+      cursor: pointer;
+    }
+
+    .radio-item input {
+      cursor: pointer;
+      accent-color: var(--color-primary-cyan);
+    }
+
     @keyframes slideInLeft {
       from { transform: translateX(-100%); opacity: 0; }
       to { transform: translateX(0); opacity: 1; }
@@ -313,6 +365,11 @@ export class UploadComponent {
   }
   folders: any[] = [];
   selectedFolderId: number = 0;
+  geofenceType: string = 'ninguno';
+
+  hasKmlFiles(): boolean {
+    return this.selectedFiles.some(f => f.name.toLowerCase().endsWith('.kml') || f.name.toLowerCase().endsWith('.kmz'));
+  }
 
   constructor(
     private apiService: ApiService,
@@ -376,7 +433,7 @@ export class UploadComponent {
     this.uploadProgress = 0;
     const folderId = this.selectedFolderId > 0 ? this.selectedFolderId : undefined;
 
-    this.apiService.uploadFiles(this.selectedFiles, projectId, folderId)
+    this.apiService.uploadFiles(this.selectedFiles, projectId, folderId, this.geofenceType)
       .pipe(finalize(() => {
         this.uploading = false;
         this.uploadProgress = 0;

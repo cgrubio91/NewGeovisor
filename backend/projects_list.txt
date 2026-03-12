@@ -1,0 +1,160 @@
+ id  |                                                  name                                                   
+-----+---------------------------------------------------------------------------------------------------------
+  65 | Huila - Tolima
+  66 | EKA
+  67 | Tecnología
+  28 | Transmilenio Av 68
+  22 | Prueba carga 3D
+  26 | Hospital de bosa
+  29 | Segunda Calzada Cartagena - Barranquilla
+  30 | NUEVO PUENTE PUMAREJO
+  31 | ESPRIELLA - RIO MATAJE
+  32 | Nuevo Puente Honda
+  33 | Aeropuerto Alfredo Vásquez Cobo – Leticia
+  34 | Tuneles Bogotá Chingaza
+  35 | Av. El Rincón Suba
+  36 | Sistema de Alcantarillado Urbano Amagá
+  37 | IDU 1467 Malla Vial
+  24 | Lagos de torca - Santa Barbara
+  38 | IDU 1463 - 2017 / MALLA VIAL ARTERIAL NO TRONCAL
+  39 | Aeropuerto Pasto
+  40 | Interventoría de la construcción de la Variante Ciénaga
+  41 | Ampliación y optimización del sistema de alcantarillado de Fundación, Magdalena Fase II
+  42 | IDU 1570 Espacio Público
+  43 | IDU 1508 Demoliciones
+  44 | Acueducto Buenavista
+  45 | IDU 1541 Puentes Atirantados
+  46 | Ruta del sol sector 1 Villeta-Korán
+  17 | Avenida Ciudad de Cali Tramo 1 – Grupo 3 V_1
+  68 | IDU-1559-2018
+  47 | Girardot - Ibagué - Cajamarca 
+  48 | CARTAGENA- BARRANQUILLA Y CIRCUNVALAR DE LA PROSPERIDAD
+   9 | pruebas geovisor
+  49 | Bucaramanga - Barrancabermeja - Yondó
+  50 | a. Neiva
+  51 | POB/MAB
+  69 | IDU 1558 AVENIDA BOSA - TINTAL
+  52 | IDU 1286 Espacio Público
+  53 | Acueducto Neiva
+  54 | _Testall
+  55 | Proyecto Colegio Nuevo Chile
+  56 | Aeropuerto El Edén Armenia 
+  57 | Aeropuerto Gustavo Rojas Pinilla San Andrés y el Embrujo de Providencia
+  58 | PROYECTO ENSAYO DE ACTAS-INVIAS
+  59 | Consorcio VIAN 62- SAN RAFAEL
+  60 | CONSORCIO VIAN 62 - El Peñol
+  61 | Variante San Gil
+  62 | tbtn
+  63 | Humedal Jaboque Norte
+  64 | Humedal Jaboque Sur
+  70 | Avenida Circunvalación Cali
+  71 | Prueba LEED GF 
+  72 | ASESORÍA PARA LA  INSPECCIÓN FISCAL  LONQUIMAY
+  73 | Aeropuerto Antonio Nariño II--
+  74 | Muro de contención El Banco - Magdalena
+  75 | eÓn
+  76 | Contrato Puentes Peatonales Autonorte IDU 1649 -2019
+  77 | FINDETER/TABLON DE GOMEZ
+  78 | Terminación de Obras ejecutadas en I.E. Pontezuela
+  79 | IDU 1399-2020 Mantenimiento Puentes Peatonales
+  80 | Construcciones planificadas - CTIC Urbanismo
+  81 | Contrato 1504-2020 Ciclorutas calle 94 y calle 92
+  82 | Malla Vial 1715-20
+  83 | Construcción de un Complejo Industrial en el Municipio de Sitionuevo, Magdalena
+  84 | Contrato 1555 Calles Comerciales
+  85 | Supervisión Chimpu Ocllo
+  86 | Contrato No. 1674 de 2020. Avenida Ciudad de Cali Tramo 1 – Grupo 3 
+  87 | Contrato 1483797 - 2020. Hospital de Bosa
+  88 | El Salado
+  89 | CONSORCIO RUTA 190 - LA MACARENA - INVIAS
+  90 | PRUEBA JE JAIMES
+  91 | SDM - 2021 -2017  BOGOTÁ D.C LOTE 6
+  92 | Espacio Publico IDU-617-21
+  93 | APC CATATUMBO
+  94 | T4 - 056 VERSALLES - LA ANGALIA (TRAMO 4)
+  95 | 1544-2021 MANTENIMIENTO PIPIRAL - VILLAVICENCIO
+  96 | T5 - 052 - 2021 APC VILLA DEL CARMEN - LA VALERA
+  97 | T2 - 055 - 2021 APC CAMPO 2 - CAMPO 6
+  98 | T1 - 058 - 2021 AMBATO - CARBONERAS
+  99 | T3 - 064 - 2021 
+ 100 | 002-C.M.A.2021 CONSTRUCCIÓN DE LA INFRAESTRUCTURA VIAL, ESPACIO PÚBLICO Y OBRAS COMPLEMENTARIAS - PASTO
+ 101 | Obra pública de infraestructura El Retorno, Mesetas, Puerto Concordia y Barbacoas
+ 102 | 108 APC-TIBU LA GABARRA
+ 103 | LAGOS DE TORCA II
+ 104 | VÍAS TERCIARIAS - CALDAS GRUPO 3
+ 105 | TRIPLE A 
+ 106 | Vias Rurales Ocaña Norte de Santander
+ 107 | Mixy Mall Los Colores
+ 108 | Casa D+D
+ 109 | ART BOYACÁ
+ 110 | 455-ANT (Vías Antioquia 2021) - INCOPLAN S.A.
+ 111 | MAB Chile (capacitaciones)
+ 112 | LEVANTAMIENTOS GMAB
+ 113 | 4G | Parque Lineal de Crespo
+ 114 | PGO III - Seguridad vial San Andres y Providencia
+ 115 | CONSORCIO GIS CARIBE
+ 116 | Diseño y Construcción del Puente Santa Rosa
+ 117 | SENDEROS CRISTO REY
+ 118 | ECOPETROL
+ 119 | Torca UF1
+ 120 | GREENFIELD COLOMBIA
+ 121 | PUERTA DE HIERRO-PALMAR DE VARELA Y CARRETO-CRUZ DEL VISO
+ 122 | DEMO - Vivienda PRUEBAS ABRIL
+ 123 | METRO LINEA 1
+ 124 | Ecopetrol AIPE ODS 12
+ 125 | Ecopetrol Barrancabermeja ODS 39
+ 126 | Ecopetrol Cartagena ODS 23 
+ 127 | Ecopetrol Bogotá ODS 24
+ 128 | Torca Uf2a
+ 129 | Ecopetrol Cartagena ODS 26
+ 130 | NUVOLI 44 ETAPA 2
+ 131 | Semaforización Country
+ 132 | CANAL DEL DIQUE
+ 133 | 4G - Iluminación UF4 CARTAGENA- BARRANQUILLA 
+ 134 | Ecopetrol ODS 27
+ 135 | Ecopetrol ODS 28
+ 136 | Ecopetrol ODS 29
+ 137 | Ecopetrol ODS30
+ 138 | ECOPETROL ODS 35
+ 139 | Ecopetrol ODS 36
+ 140 | UCI PED Y SALAS CX - Colina Hospitalaria
+ 141 | UCI adultos clínica Country
+ 142 | Proyecto 33DC
+ 143 | TRAMO 1 CARTAGENA- BARRANQUILLA Y CIRCUNVALAR DE LA PROSPERIDAD
+ 144 | 1071-2022 INVIAS BARBAS BREMEN
+ 145 | SANTA MARTA – RIOHACHA – PARAGUACHÓN
+ 146 | ODS 34
+ 147 | Plan Parcial No. 15 – “Mazda Mavaia” fase 1
+ 148 | Vías del Renacimiento
+ 149 | Traslado de redes Caracolí UF5
+ 150 | PEAJES COLOMBIA
+ 151 | PROYECTO URGENCIAS PEDIÁTRICAS-CARDIOINFANTIL
+ 152 | Corredor Verde  carrera 7, Lote 1
+ 154 | PUENTE CARACOLI
+ 155 | ODS 40 campo Jazmin
+ 156 | 1071-2022 MANIZALES - MARIQUITA
+ 157 | GMAB CANAL DEL DIQUE EN MABPRO
+ 158 | BG03 ODATA DATACENTER 
+ 159 | ODS 01 - CAMPO DINA
+ 160 | ODS 01 - CHICHIMENE
+ 161 | ODS 01 - CAMPO JAZMIN
+ 162 | ODS 01 - RUBIALES
+ 163 | ODS 02 - BARRANCABERMEJA COLEGIO INFANTAS
+ 164 | ODS 01 - ORITO
+ 165 | ALSACIA PARC
+ 166 | Cauca - Nariño
+ 167 | ECOPETROL - ODS 03 Apiay, Chichimene y Castilla
+ 168 | ESPACIO PÚBLICO BRIGADA 3 
+ 169 | EPM - LA PICACHA | PAULITA
+ 170 | Latam-1-2025
+ 171 | ALSACIA ARBORE
+ 172 | FFIE- COLEGIOS NARIÑO ALBÁN
+ 173 | FFIE-COLEGIOS NARIÑO ARBOLEDA
+ 174 | EPM - Redes Centro CW354529
+ 175 | EPM - SUBESTACION ELECTRICA INDUSTRIALES 
+ 176 | SKSM - Obra nueva
+ 177 | SKRH - Obra nueva
+ 178 | EPM - ELIMINACIÓN DESCARGAS–ZONA CENTRO NORTE
+ 153 | Contrato 1790 de 2023 María Paz
+(156 rows)
+

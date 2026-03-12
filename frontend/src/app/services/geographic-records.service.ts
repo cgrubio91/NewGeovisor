@@ -96,6 +96,27 @@ export class GeographicRecordsService {
   }
 
   /**
+   * Obtiene la lista de proyectos directamente de MongoDB
+   */
+  getMongoDBProjects(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/mongodb-projects`);
+  }
+
+  /**
+   * Sincroniza datos de MongoDB a PostgreSQL
+   */
+  syncMongoDBData(): Observable<any> {
+    return this.http.post<any>(`${this.apiUrl}/sync-mongodb-data`, {});
+  }
+
+  /**
+   * Obtiene la lista de usuarios de PostgreSQL
+   */
+  getUsers(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiService.getApiUrl()}/users/`);
+  }
+
+  /**
    * Descarga el archivo de reporte
    */
   downloadReport(filename: string): Observable<Blob> {
@@ -125,12 +146,11 @@ export class GeographicRecordsService {
   }
 
   /**
-   * Convierte registros a formato GeoJSON para OpenLayers
+   * Convierte registros a formato GeoJSON para OpenLayers con lógica de semáforo
    */
   recordsToGeoJSON(records: GeoRecord[]): any {
     const features = records
       .filter(record => {
-        // Intentar obtener coordenadas de diferentes fuentes
         let coords = record.coords;
         if (!coords && record.coordinates_google) {
           coords = this.parseCoordinates(record.coordinates_google);
@@ -143,6 +163,31 @@ export class GeographicRecordsService {
           coords = this.parseCoordinates(record.coordinates_google);
         }
 
+        // --- Lógica de Semáforo ---
+        // Verde: Obra, Amarillo: Oficina, Rojo: Externo
+        const clasificacion = (record['Clasificación'] || record['clasificacion'] || '').toLowerCase();
+        let color = '#ff0000'; // Rojo por defecto (Externo)
+        
+        if (clasificacion.includes('obra')) {
+          color = '#00ff00'; // Verde
+        } else if (clasificacion.includes('oficina')) {
+          color = '#ffff00'; // Amarillo
+        }
+
+        // --- Construcción de Título ---
+        // "Fecha - Formato o codigo"
+        const fechaStr = record['Fecha del registro'] || record['date'] || 'S/F';
+        const formatoStr = record['Formato'] || record['format'] || record['codigo'] || 'S/C';
+        const title = `${fechaStr} - ${formatoStr}`;
+
+        // --- Construcción de Link ---
+        // https://segmab.com/i40/home#!/proyecto/ID_PROYECTO/registro/ID_REGISTRO
+        const projectId = record['project_id'] || record['id_proyecto'];
+        const recordId = record['id'] || record['_id'];
+        const link = (projectId && recordId) 
+          ? `https://segmab.com/i40/home#!/proyecto/${projectId}/registro/${recordId}`
+          : null;
+
         return {
           type: 'Feature',
           geometry: {
@@ -151,10 +196,11 @@ export class GeographicRecordsService {
           },
           properties: {
             ...record,
-            user: record.user || 'Desconocido',
-            date: record.date || 'N/A',
-            format: record.format || 'N/A',
-            project_id: record.project_id || 'N/A'
+            title: title,
+            user: record['Colaborador'] || record['user'] || 'Desconocido',
+            color: color,
+            link: link,
+            description: `Colaborador: ${record['Colaborador'] || record['user'] || 'N/A'}`
           }
         };
       });

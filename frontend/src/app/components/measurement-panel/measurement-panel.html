@@ -42,8 +42,8 @@
                 <ng-container *ngTemplateOutlet="measurementItem; context: { $implicit: m }"></ng-container>
             </div>
 
-            <!-- Folders -->
-            <div *ngFor="let folder of folders" class="folder-group">
+            <!-- Folders (Only show if they have measurements) -->
+            <div *ngFor="let folder of folders" class="folder-group" [hidden]="getMeasurementsInFolder(folder.id).length === 0">
                 <div class="folder-header">
                     <div class="folder-info" (click)="toggleFolder(folder.id)">
                         <span class="material-icons">{{folderExpanded[folder.id] ? 'expand_more' :

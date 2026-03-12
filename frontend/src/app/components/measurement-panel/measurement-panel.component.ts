@@ -84,16 +84,39 @@ export class MeasurementPanelComponent implements OnInit {
     }
 
     async deleteFolder(folder: any) {
-        if (!confirm(`¿Eliminar la carpeta "${folder.name}"? las medidas se moverán a la raíz.`)) return;
+        const isQueryFolder = folder.name.startsWith('Consulta ');
+        const confirmMsg = isQueryFolder 
+            ? `¿Eliminar la carpeta "${folder.name}" y todos los marcadores de la consulta?`
+            : `¿Eliminar la carpeta "${folder.name}"? Los elementos que contiene también se eliminarán de forma permanente.`;
+
+        if (!confirm(confirmMsg)) return;
+        
         try {
+            // 1. Obtener y borrar todos los marcadores en esta carpeta
+            const items = this.getMeasurementsInFolder(folder.id);
+            if (items.length > 0) {
+                console.log(`[MeasurementPanel] Eliminando ${items.length} elementos de la carpeta...`);
+                // Usamos un bucle para borrarlos uno a uno a través del servicio
+                const deletePromises = items.map(m => {
+                    if (m.id) return this.measurementService.deleteMeasurement(m.id);
+                    return Promise.resolve();
+                });
+                await Promise.all(deletePromises);
+            }
+
+            // 2. Borrar la carpeta física en la DB
             await firstValueFrom(this.projectService.deleteFolder(folder.id));
+            
+            // 3. Refrescar datos
             const projectId = this.projectContext.getActiveProjectId();
             if (projectId) {
                 const updated = await firstValueFrom(this.projectService.getProjectById(projectId));
                 this.projectContext.setActiveProject(updated);
+                await this.measurementService.loadMeasurements(projectId);
             }
         } catch (error) {
-            console.error('Error deleting folder:', error);
+            console.error('Error deleting folder and contents:', error);
+            alert('Error al eliminar la carpeta o sus elementos');
         }
     }
 
