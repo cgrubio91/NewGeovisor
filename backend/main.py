@@ -3,8 +3,13 @@ import sys
 import shutil
 import io
 import numpy as np
+import pandas as pd
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+from dotenv import load_dotenv
+
+# --- LOAD ENVIRONMENT VARIABLES ---
+load_dotenv()
 
 # --- ENVIRONMENT FIX FOR PROJ (MUST BE AT THE VERY TOP) ---
 try:
@@ -981,6 +986,237 @@ async def download_layer_file(layer_id: int, db: Session = Depends(get_db)):
         filename=os.path.basename(file_path),
         media_type='application/octet-stream'
     )
+
+
+# ============================================================================
+# ENDPOINTS: ANÁLISIS GEOGRÁFICO DE REGISTROS
+# ============================================================================
+
+from geographic_records import crear_analizador_desde_env
+from pydantic import BaseModel
+from datetime import date
+
+class GenerarReporteRequest(BaseModel):
+    """Request para generar reporte geográfico de registros"""
+    fecha_inicio: date
+    fecha_fin: date
+    pid_filtro: Optional[str] = None
+    user_filtro: Optional[str] = None
+    nombre_proyecto_filtro: Optional[str] = None
+
+
+@app.post("/api/v1/geographic-records/generar-reporte")
+async def generar_reporte_registros(
+    request: GenerarReporteRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Genera un reporte de registros con análisis geográfico.
+    
+    Consulta MongoDB a través de túnel SSH, clasifica registros por ubicación
+    (EN OBRA, EN OFICINA, UBICACIÓN EXTERNA) usando geocercas en formato KML/KMZ,
+    y retorna los datos para descarga o visualización.
+    
+    **Parámetros:**
+    - `fecha_inicio`: Inicio del rango de fechas (YYYY-MM-DD)
+    - `fecha_fin`: Fin del rango de fechas (YYYY-MM-DD)
+    - `pid_filtro`: (Opcional) Filtrar por ID de proyecto (PostgreSQL ID)
+    - `user_filtro`: (Opcional) Filtrar por email del usuario
+    - `nombre_proyecto_filtro`: (Opcional) Filtrar por nombre de proyecto (regex)
+    
+    **Criterios de clasificación:**
+    - Carga polígonos de obra: `{pid}.kml` o `{pid}.kmz`
+    - Carga polígonos de oficina: `{pid}_oficina.kml` o `{pid}_oficina.kmz`
+    - Usa distancia de punto-en-polígono (Shapely) para clasificar
+    
+    **Retorna:**
+    - `status`: success/processing/error
+    - `mensaje`: Descripción del estado
+    - `archivo`: Ruta donde está el archivo (si se completó)
+    - `total_registros`: Cantidad de registros procesados
+    - `records`: Lista de registros (para visualización en mapa)
+    - `url_descarga`: URL para descargar el Excel (si se completó)
+    """
+    try:
+        # Convertir date a datetime
+        fecha_inicio = datetime.combine(request.fecha_inicio, datetime.min.time())
+        fecha_fin = datetime.combine(request.fecha_fin, datetime.min.time())
+        
+        logger.info(f"Generando reporte: {fecha_inicio} - {fecha_fin} (usuario: {current_user.username})")
+        
+        # Si se recibe pid_filtro (ID de PostgreSQL), resolver el nombre del proyecto
+        proyecto_nombre_para_mongo = None
+        if request.pid_filtro:
+            try:
+                # Buscar proyecto en PostgreSQL
+                proyecto = db.query(models.Project).filter(models.Project.id == request.pid_filtro).first()
+                if proyecto:
+                    proyecto_nombre_para_mongo = proyecto.name
+                    logger.info(f"Proyecto PostgreSQL ID {request.pid_filtro} → Nombre: '{proyecto_nombre_para_mongo}'")
+                else:
+                    logger.warning(f"Proyecto PostgreSQL ID {request.pid_filtro} no encontrado")
+            except Exception as e:
+                logger.error(f"Error al resolver proyecto: {str(e)}")
+        
+        # Usar el nombre del proyecto para buscar en MongoDB
+        nombre_proyecto_filtro = proyecto_nombre_para_mongo or request.nombre_proyecto_filtro
+        
+        # Crear analizador
+        analizador = crear_analizador_desde_env(kml_base_path="uploads")
+        
+        # Generar reporte
+        df = analizador.generar_reporte(
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            pid_filtro=None,  # NO usar pid_filtro directo (es ID de PostgreSQL, no MongoDB)
+            user_filtro=request.user_filtro,
+            nombre_proyecto_filtro=nombre_proyecto_filtro  # Usar nombre del proyecto para buscar en MongoDB
+        )
+        
+        if len(df) == 0:
+            return {
+                "status": "sin_datos",
+                "mensaje": "No se encontraron registros para los criterios especificados",
+                "total_registros": 0,
+                "records": []
+            }
+        
+        # Generar nombre de archivo
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre_archivo = f"Reporte_Registros_{timestamp}.xlsx"
+        ruta_archivo = os.path.join("report", nombre_archivo)
+        
+        # Guardar Excel
+        analizador.exportar_a_excel(df, ruta_archivo)
+        
+        # Generar estadísticas rápidas
+        stats = {
+            "EN OBRA": int((df["Clasificación"] == "EN OBRA").sum()),
+            "EN OFICINA": int((df["Clasificación"] == "EN OFICINA").sum()),
+            "UBICACIÓN EXTERNA": int((df["Clasificación"] == "UBICACIÓN EXTERNA").sum())
+        }
+        
+        # Convertir DataFrame a registros para el frontend
+        # Normalizar nombres de columnas para que sean accesibles desde el frontend
+        records = []
+        for _, row in df.iterrows():
+            record = {}
+            for col in df.columns:
+                # Intentar parsear coordenadas si están en formato string
+                if col in ["coordinates_google", "Coordenadas_Google"]:
+                    coords_str = str(row[col]) if pd.notna(row[col]) else ""
+                    # Intentar extraer lat/lon del string "lat,lon"
+                    try:
+                        if "," in coords_str and coords_str != "":
+                            parts = coords_str.split(",")
+                            lat = float(parts[0].strip())
+                            lon = float(parts[1].strip())
+                            record["coordinates_google"] = coords_str
+                            record["coords"] = {"lat": lat, "lon": lon}
+                        else:
+                            record[col] = row[col]
+                    except:
+                        record[col] = row[col]
+                else:
+                    # Convertir valores NaN a None para JSON
+                    value = row[col]
+                    if pd.isna(value):
+                        record[col] = None
+                    elif isinstance(value, (int, float)):
+                        record[col] = float(value) if isinstance(value, (int, float)) else value
+                    else:
+                        record[col] = str(value)
+            
+            records.append(record)
+        
+        # Limpiar cache
+        analizador.limpiar_cache()
+        
+        return {
+            "status": "success",
+            "mensaje": f"Reporte generado exitosamente con {len(df)} registros",
+            "archivo": ruta_archivo,
+            "total_registros": len(df),
+            "estadisticas": stats,
+            "records": records,
+            "url_descarga": f"/files/{nombre_archivo}",
+            "timestamp": timestamp
+        }
+    
+    except Exception as e:
+        logger.error(f"Error generando reporte: {str(e)}", exc_info=True)
+        return {
+            "status": "error",
+            "mensaje": f"Error al generar reporte: {str(e)}",
+            "records": []
+        }
+
+
+@app.get("/api/v1/geographic-records/descargar/{filename}")
+async def descargar_reporte(
+    filename: str,
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Descarga un archivo de reporte generado.
+    
+    **Seguridad:** Solo archivos en la carpeta `/report/` son accesibles.
+    
+    Args:
+        filename: Nombre del archivo Excel
+        
+    Returns:
+        El archivo Excel para descarga
+    """
+    # Validar que el archivo esté en la carpeta de reportes
+    ruta_archivo = os.path.join("report", filename)
+    ruta_absoluta = os.path.abspath(ruta_archivo)
+    ruta_reportes = os.path.abspath("report")
+    
+    # Prevenir path traversal
+    if not ruta_absoluta.startswith(ruta_reportes):
+        raise HTTPException(status_code=403, detail="Acceso denegado")
+    
+    if not os.path.exists(ruta_absoluta):
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    
+    return FileResponse(
+        path=ruta_absoluta,
+        filename=filename,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+
+
+@app.get("/api/v1/geographic-records/info")
+async def obtener_info_analizador():
+    """
+    Retorna información sobre la configuración del analizador geográfico.
+    
+    Útil para verificar que las credenciales SSH y MongoDB estén configuradas
+    correctamente en las variables de entorno.
+    """
+    try:
+        ssh_host = os.getenv("SSH_HOST", "No configurado")
+        ssh_user = os.getenv("SSH_USER", "No configurado")
+        db_name = os.getenv("DB_NAME", "No configurado")
+        mongo_port = os.getenv("MONGO_PORT", 27017)
+        
+        return {
+            "status": "configurado",
+            "ssh_host": ssh_host,
+            "ssh_user": ssh_user,
+            "db_name": db_name,
+            "mongo_port": mongo_port,
+            "kml_base_path": "uploads",
+            "mensaje": "Sistema de análisis geográfico configurado"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "mensaje": f"Error obteniendo información: {str(e)}"
+        }
 
 if __name__ == "__main__":
     import uvicorn

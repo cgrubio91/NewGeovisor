@@ -1,0 +1,438 @@
+.geo-records-container {
+  height: 100%;
+  overflow-y: auto;
+  background: linear-gradient(135deg, var(--bg-primary) 0%, #1a2f4a 100%);
+  padding: 2rem;
+}
+
+.records-header {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(26, 188, 156, 0.2);
+  border-radius: 12px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2rem;
+}
+
+.header-content h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 2rem;
+  color: #fff;
+  font-weight: 600;
+}
+
+.subtitle {
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+/* ===== FILTROS ===== */
+.filters-section {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(26, 188, 156, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  backdrop-filter: blur(10px);
+}
+
+.filter-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.filter-group label {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.input-field {
+  padding: 0.75rem;
+  border: 1px solid rgba(26, 188, 156, 0.3);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--color-primary-cyan);
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(26, 188, 156, 0.1);
+}
+
+.input-field::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.input-field option {
+  background: #1a2f4a;
+  color: #fff;
+}
+
+.error {
+  color: #ff6b6b;
+  font-size: 0.8rem;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 1rem;
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+/* ===== BOTONES ===== */
+.btn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-primary-cyan) 0%, #0ea8a8 100%);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(26, 188, 156, 0.3);
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(26, 188, 156, 0.3);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(26, 188, 156, 0.2);
+  border-color: var(--color-primary-cyan);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-large {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.05rem;
+  justify-content: center;
+  margin: 1.5rem 0;
+}
+
+.btn-map {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+}
+
+.btn-map:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+/* ===== RESULTADOS ===== */
+.results-section {
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  gap: 1rem;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(26, 188, 156, 0.2);
+  border-top-color: var(--color-primary-cyan);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-container p {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ===== STATS ===== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(26, 188, 156, 0.2);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-align: center;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  border-color: var(--color-primary-cyan);
+  box-shadow: 0 8px 20px rgba(26, 188, 156, 0.15);
+}
+
+.stat-number {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-primary-cyan);
+  margin-bottom: 0.5rem;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 500;
+}
+
+.stat-card.success .stat-number {
+  color: #51cf66;
+}
+
+.stat-card.warning .stat-number {
+  color: #ffd43b;
+}
+
+.stat-card.info .stat-number {
+  color: #74c0fc;
+}
+
+/* ===== TABLA ===== */
+.records-table-container {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(26, 188, 156, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
+  backdrop-filter: blur(10px);
+  margin-top: 2rem;
+}
+
+.records-table-container h3 {
+  margin: 0 0 1.5rem 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 1.1rem;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.records-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.records-table thead {
+  background: rgba(26, 188, 156, 0.1);
+  border-bottom: 2px solid rgba(26, 188, 156, 0.3);
+}
+
+.records-table th {
+  padding: 1rem;
+  text-align: left;
+  color: var(--color-primary-cyan);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+}
+
+.records-table td {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid rgba(26, 188, 156, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.records-table tbody tr:hover {
+  background: rgba(26, 188, 156, 0.08);
+}
+
+.records-table tbody tr.has-coords {
+  background: rgba(26, 188, 156, 0.04);
+}
+
+.coords-cell {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: var(--color-primary-cyan);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background: rgba(26, 188, 156, 0.2);
+  border-radius: 4px;
+  text-align: center;
+  line-height: 20px;
+  font-size: 0.75rem;
+}
+
+.badge-empty {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.classification {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.classification.en-obra {
+  background: rgba(81, 207, 102, 0.2);
+  color: #51cf66;
+  border: 1px solid #51cf66;
+}
+
+.classification.en-oficina {
+  background: rgba(255, 212, 59, 0.2);
+  color: #ffd43b;
+  border: 1px solid #ffd43b;
+}
+
+.classification.ubicación-externa {
+  background: rgba(116, 192, 252, 0.2);
+  color: #74c0fc;
+  border: 1px solid #74c0fc;
+}
+
+.classification.n-a {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* ===== ESTADO VACÍO ===== */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.empty-state h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.3rem;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+/* ===== RESPONSIVO ===== */
+@media (max-width: 768px) {
+  .geo-records-container {
+    padding: 1rem;
+  }
+
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .filter-form {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-actions {
+    flex-direction: column;
+    grid-column: 1;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .records-table {
+    font-size: 0.8rem;
+  }
+
+  .records-table th,
+  .records-table td {
+    padding: 0.5rem;
+  }
+}

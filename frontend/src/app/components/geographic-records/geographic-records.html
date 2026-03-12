@@ -1,0 +1,200 @@
+<div class="geo-records-container">
+  <!-- Encabezado -->
+  <div class="records-header">
+    <div class="header-content">
+      <div>
+        <h1>📍 Consulta de Registros Geográficos</h1>
+        <p class="subtitle">Filtra registros por proyecto, usuario y rango de fechas para visualizarlos en el mapa</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-primary" (click)="downloadReport()" [disabled]="isLoading || records.length === 0">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          Descargar Excel
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Formulario de Filtros -->
+  <div class="filters-section">
+    <form [formGroup]="filterForm" (ngSubmit)="submitFilter()" class="filter-form">
+      <div class="filter-group">
+        <label for="fechaInicio">📅 Fecha Inicial</label>
+        <input 
+          type="date" 
+          id="fechaInicio" 
+          formControlName="fechaInicio"
+          class="input-field"
+          required
+        >
+        <span class="error" *ngIf="filterForm.get('fechaInicio')?.invalid && filterForm.get('fechaInicio')?.touched">
+          Requerido
+        </span>
+      </div>
+
+      <div class="filter-group">
+        <label for="fechaFin">📅 Fecha Final</label>
+        <input 
+          type="date" 
+          id="fechaFin" 
+          formControlName="fechaFin"
+          class="input-field"
+          required
+        >
+        <span class="error" *ngIf="filterForm.get('fechaFin')?.invalid && filterForm.get('fechaFin')?.touched">
+          Requerido
+        </span>
+      </div>
+
+      <div class="filter-group">
+        <label for="proyecto">🏗️ Proyecto (opcional)</label>
+        <select 
+          id="proyecto" 
+          formControlName="proyecto"
+          class="input-field"
+        >
+          <option value="">-- Todos los proyectos --</option>
+          <option *ngFor="let project of projects" [value]="project.id || project._id">
+            {{ project.name }}
+          </option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label for="usuario">👤 Usuario (opcional)</label>
+        <input 
+          type="text" 
+          id="usuario" 
+          formControlName="usuario"
+          class="input-field"
+          placeholder="Nombre o email del usuario"
+        >
+      </div>
+
+      <div class="filter-group">
+        <label for="nombreProyecto">📝 Nombre Proyecto (opcional)</label>
+        <input 
+          type="text" 
+          id="nombreProyecto" 
+          formControlName="nombreProyecto"
+          class="input-field"
+          placeholder="Buscar por nombre de proyecto"
+        >
+      </div>
+
+      <div class="filter-actions">
+        <button 
+          type="submit" 
+          class="btn btn-primary"
+          [disabled]="isLoading"
+        >
+          <span *ngIf="!isLoading">🔍 Buscar Registros</span>
+          <span *ngIf="isLoading">⏳ Buscando...</span>
+        </button>
+        <button 
+          type="button" 
+          class="btn btn-secondary"
+          (click)="clearFilters()"
+          [disabled]="isLoading"
+        >
+          🔄 Limpiar Filtros
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Resultados y Estadísticas -->
+  <div class="results-section" *ngIf="records.length > 0 || isLoading">
+    <!-- Loading State -->
+    <div class="loading-container" *ngIf="isLoading">
+      <div class="spinner"></div>
+      <p>Consultando MongoDB...</p>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="stats-grid" *ngIf="!isLoading">
+      <div class="stat-card">
+        <div class="stat-number">{{ stats.totalRecords }}</div>
+        <div class="stat-label">Total Registros</div>
+      </div>
+      <div class="stat-card success">
+        <div class="stat-number">{{ stats.enObra }}</div>
+        <div class="stat-label">EN OBRA</div>
+      </div>
+      <div class="stat-card warning">
+        <div class="stat-number">{{ stats.enOficina }}</div>
+        <div class="stat-label">EN OFICINA</div>
+      </div>
+      <div class="stat-card info">
+        <div class="stat-number">{{ stats.ubicacionExterna }}</div>
+        <div class="stat-label">UBICACIÓN EXTERNA</div>
+      </div>
+    </div>
+
+    <!-- Botón para cargar en mapa -->
+    <button 
+      *ngIf="!isLoading && recordsForMap.length > 0"
+      class="btn btn-large btn-map"
+      (click)="loadToMap()"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+        <circle cx="12" cy="10" r="3"></circle>
+      </svg>
+      Mostrar {{ recordsForMap.length }} Registros en el Mapa
+    </button>
+
+    <!-- Tabla de Registros -->
+    <div class="records-table-container" *ngIf="!isLoading">
+      <h3>📋 Registros Encontrados ({{ records.length }})</h3>
+      <div class="table-wrapper">
+        <table class="records-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Usuario</th>
+              <th>Fecha</th>
+              <th>Formato</th>
+              <th>Proyecto</th>
+              <th>Coordenadas</th>
+              <th>Clasificación</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let record of records; let i = index" [class.has-coords]="(record.coords || record.coordinates_google)">
+              <td>{{ i + 1 }}</td>
+              <td>{{ record.user || 'N/A' }}</td>
+              <td>{{ record.date || 'N/A' }}</td>
+              <td>{{ record.format || 'N/A' }}</td>
+              <td>{{ record.project_id || 'N/A' }}</td>
+              <td class="coords-cell" *ngIf="record.coords || record.coordinates_google">
+                <span class="badge">📍</span>
+                {{ record.coordinates_google || (record.coords?.lat + ',' + record.coords?.lon) }}
+              </td>
+              <td class="coords-cell" *ngIf="!record.coords && !record.coordinates_google">
+                <span class="badge-empty">-</span>
+              </td>
+              <td>
+                <span [class]="'classification ' + getClassification(record).toLowerCase().replace(' ', '-')">
+                  {{ getClassification(record) }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Estado vacío -->
+  <div class="empty-state" *ngIf="!isLoading && records.length === 0">
+    <div class="empty-icon">🗺️</div>
+    <h3>Sin registros</h3>
+    <p>Usa los filtros arriba para consultar registros de la base de datos de MongoDB</p>
+  </div>
+</div>
+

@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { DashboardComponent } from './components/dashboard/dashboard';
 import { ProjectManager } from './components/project-manager/project-manager';
 import { UserManager } from './components/user-manager/user-manager';
+import { GeographicRecordsComponent } from './components/geographic-records/geographic-records';
 
 // Lazy-loaded component para la vista de mapa
 const MapViewComponent = () => import('./views/map-view/map-view.component').then(m => m.MapViewComponent);
@@ -15,6 +16,7 @@ export const routes: Routes = [
     { path: 'projects', component: ProjectManager },
     { path: 'map', loadComponent: MapViewComponent },
     { path: 'users', component: UserManager },
+    { path: 'records', component: GeographicRecordsComponent },
 
     // Ruta 404 - redirige al dashboard
     { path: '**', redirectTo: '/dashboard' }

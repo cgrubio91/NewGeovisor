@@ -1,0 +1,264 @@
+<div class="geographic-records-container">
+  
+  <!-- Encabezado -->
+  <div class="header">
+    <mat-card class="header-card">
+      <mat-card-content>
+        <h1>
+          <mat-icon>public</mat-icon>
+          Análisis Geográfico de Registros
+        </h1>
+        <p class="subtitle">
+          Consulta registros de colaboradores, clasifica por ubicación 
+          (EN OBRA, EN OFICINA, EXTERNA) y descarga reportes en Excel
+        </p>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Formulario de Filtros -->
+  <div class="filters-section">
+    <mat-card class="filters-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>tune</mat-icon>
+          Filtros de Búsqueda
+        </mat-card-title>
+      </mat-card-header>
+      
+      <mat-card-content>
+        <form [formGroup]="form" class="filter-form">
+          
+          <!-- Fila 1: Fechas -->
+          <div class="form-row">
+            <mat-form-field class="form-field half">
+              <mat-label>Fecha Inicial</mat-label>
+              <input 
+                matInput 
+                type="date" 
+                formControlName="fechaInicio"
+                required>
+              <mat-error *ngIf="form.get('fechaInicio')?.hasError('required')">
+                La fecha inicial es requerida
+              </mat-error>
+            </mat-form-field>
+            
+            <mat-form-field class="form-field half">
+              <mat-label>Fecha Final</mat-label>
+              <input 
+                matInput 
+                type="date" 
+                formControlName="fechaFin"
+                required>
+              <mat-error *ngIf="form.get('fechaFin')?.hasError('required')">
+                La fecha final es requerida
+              </mat-error>
+            </mat-form-field>
+          </div>
+          
+          <!-- Fila 2: Filtros Opcionales -->
+          <div class="form-row">
+            <mat-form-field class="form-field half">
+              <mat-label>PID del Proyecto (Opcional)</mat-label>
+              <input 
+                matInput 
+                formControlName="pidFiltro"
+                placeholder="Ej: 5f231f11682b965f9889826c">
+              <mat-hint>ID de 24 caracteres del proyecto en MongoDB</mat-hint>
+              <mat-error *ngIf="form.get('pidFiltro')?.hasError('pattern')">
+                PID inválido. Debe ser un ID de 24 caracteres hexadecimales
+              </mat-error>
+            </mat-form-field>
+            
+            <mat-form-field class="form-field half">
+              <mat-label>Email del Usuario (Opcional)</mat-label>
+              <input 
+                matInput 
+                type="email"
+                formControlName="usuarioFiltro"
+                placeholder="Ej: usuario@example.com">
+              <mat-error *ngIf="form.get('usuarioFiltro')?.hasError('pattern')">
+                Email inválido
+              </mat-error>
+            </mat-form-field>
+          </div>
+          
+          <!-- Fila 3: Filtro por Nombre -->
+          <div class="form-row">
+            <mat-form-field class="form-field full">
+              <mat-label>Nombre del Proyecto (Opcional - Búsqueda)</mat-label>
+              <input 
+                matInput 
+                formControlName="nombreProyectoFiltro"
+                placeholder="Ej: Aeropuerto, Cicloruta, Avenida...">
+              <mat-hint>Búsqueda insensible a mayúsculas/minúsculas (expresión regular)</mat-hint>
+            </mat-form-field>
+          </div>
+          
+          <!-- Botones -->
+          <div class="button-group">
+            <button 
+              mat-raised-button 
+              color="primary"
+              (click)="generarReporte()"
+              [disabled]="form.invalid || generando">
+              <mat-icon *ngIf="!generando">assessment</mat-icon>
+              <mat-spinner *ngIf="generando" diameter="20"></mat-spinner>
+              {{ generando ? 'Generando...' : 'Generar Reporte' }}
+            </button>
+            
+            <button 
+              mat-stroked-button
+              color="accent"
+              (click)="form.reset()"
+              [disabled]="generando">
+              <mat-icon>clear</mat-icon>
+              Limpiar Filtros
+            </button>
+          </div>
+        </form>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Resultados y Estadísticas -->
+  <div class="results-section" *ngIf="ultimoReporte">
+    
+    <!-- Resumen General -->
+    <mat-card class="summary-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>bar_chart</mat-icon>
+          Resumen del Reporte
+        </mat-card-title>
+      </mat-card-header>
+      
+      <mat-card-content>
+        <div class="summary-stats">
+          <div class="stat-box total">
+            <div class="stat-value">{{ ultimoReporte.total_registros }}</div>
+            <div class="stat-label">Registros Total</div>
+          </div>
+          
+          <div class="stat-box en-obra">
+            <div class="stat-value">{{ ultimoReporte.estadisticas['EN OBRA'] }}</div>
+            <div class="stat-label">EN OBRA</div>
+            <div class="stat-percent">
+              {{ calcularPorcentaje(ultimoReporte.estadisticas['EN OBRA']) }}
+            </div>
+          </div>
+          
+          <div class="stat-box en-oficina">
+            <div class="stat-value">{{ ultimoReporte.estadisticas['EN OFICINA'] }}</div>
+            <div class="stat-label">EN OFICINA</div>
+            <div class="stat-percent">
+              {{ calcularPorcentaje(ultimoReporte.estadisticas['EN OFICINA']) }}
+            </div>
+          </div>
+          
+          <div class="stat-box externa">
+            <div class="stat-value">{{ ultimoReporte.estadisticas['UBICACIÓN EXTERNA'] }}</div>
+            <div class="stat-label">UBICACIÓN EXTERNA</div>
+            <div class="stat-percent">
+              {{ calcularPorcentaje(ultimoReporte.estadisticas['UBICACIÓN EXTERNA']) }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabla de Estadísticas -->
+        <div class="table-container">
+          <table mat-table [dataSource]="obtenerDatosEstadisticas()" class="estadisticas-table">
+            
+            <!-- Columna: Clasificación -->
+            <ng-container matColumnDef="clasificacion">
+              <th mat-header-cell *matHeaderCellDef>Clasificación</th>
+              <td mat-cell *matCellDef="let element">
+                <mat-chip 
+                  [ngClass]="'clasificacion-' + element.clasificacion.toLowerCase().replace(' ', '-')">
+                  <mat-icon>{{ obtenerIconoClasificacion(element.clasificacion) }}</mat-icon>
+                  {{ element.clasificacion }}
+                </mat-chip>
+              </td>
+            </ng-container>
+            
+            <!-- Columna: Cantidad -->
+            <ng-container matColumnDef="cantidad">
+              <th mat-header-cell *matHeaderCellDef>Cantidad</th>
+              <td mat-cell *matCellDef="let element">
+                <strong>{{ element.cantidad }}</strong>
+              </td>
+            </ng-container>
+            
+            <!-- Columna: Porcentaje -->
+            <ng-container matColumnDef="porcentaje">
+              <th mat-header-cell *matHeaderCellDef>Porcentaje</th>
+              <td mat-cell *matCellDef="let element">
+                <div class="progress-bar">
+                  <div 
+                    class="progress-fill"
+                    [ngClass]="'clasificacion-' + element.clasificacion.toLowerCase().replace(' ', '-')"
+                    [style.width]="element.porcentaje">
+                  </div>
+                </div>
+                <span class="percentage-text">{{ element.porcentaje }}</span>
+              </td>
+            </ng-container>
+            
+            <tr mat-header-row *matHeaderRowDef="columnasResumen"></tr>
+            <tr mat-row *matRowDef="let row; columns: columnasResumen;"></tr>
+          </table>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Información del Archivo -->
+    <mat-card class="download-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>download</mat-icon>
+          Descargar Reporte
+        </mat-card-title>
+      </mat-card-header>
+      
+      <mat-card-content>
+        <div class="download-info">
+          <p>
+            <strong>Archivo:</strong> {{ ultimoReporte.archivo }}
+          </p>
+          <p>
+            <strong>Generado:</strong> {{ ultimoReporte.timestamp }}
+          </p>
+          <p class="description">
+            El archivo Excel contiene las siguientes columnas:
+            Proyecto, Colaborador, Cargo, Correo, Fecha del registro, 
+            Formato, Latitud, Longitud, Google Maps Link, Clasificación, URL Registro
+          </p>
+        </div>
+        
+        <div class="download-buttons">
+          <button 
+            mat-raised-button 
+            color="accent"
+            (click)="descargarReporte()"
+            [disabled]="loading">
+            <mat-icon *ngIf="!loading">download</mat-icon>
+            <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+            {{ loading ? 'Descargando...' : 'Descargar Excel' }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+  </div>
+
+  <!-- Mensaje cuando no hay reporte -->
+  <div class="no-results" *ngIf="!ultimoReporte && !generando">
+    <mat-card>
+      <mat-card-content>
+        <mat-icon>info</mat-icon>
+        <p>Completa los filtros y genera un reporte para ver los resultados aquí</p>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+</div>

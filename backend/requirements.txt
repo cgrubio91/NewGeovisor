@@ -16,7 +16,7 @@ fastkml==0.12
 
 # Procesamiento geoespacial - Nubes de puntos y 3D
 laspy[lazrs]==2.5.1
-py3dtiles==5.0.0
+py3dtiles==7.0.0
 trimesh==4.0.5
 scipy==1.11.4
 
@@ -35,9 +35,19 @@ python-dotenv==1.0.0
 sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
 geoalchemy2==0.14.3
+pymongo==4.6.1
+sshtunnel==0.4.0
+paramiko==3.3.1
+pyOpenSSL==24.0.0
+cryptography==42.0.5
 
 # Autenticación y seguridad
 passlib[bcrypt]==1.7.4
 python-jose[cryptography]==3.3.0
 pydantic-settings==2.1.0
 email-validator==2.1.0.post1
+
+# Utilidades adicionales
+openpyxl==3.1.2
+pandas==2.2.0
+diskcache==5.6.3
