@@ -17,11 +17,11 @@
     <div class="toolbar card" *ngIf="!showCreateForm">
         <div class="search-box">
             <i class="fas fa-search"></i>
-            <input type="text" [(ngModel)]="searchQuery" placeholder="Buscar por nombre, correo o usuario...">
+            <input type="text" [(ngModel)]="searchQuery" (ngModelChange)="onFilterChange()" placeholder="Buscar por nombre, correo o usuario...">
         </div>
         <div class="filter-group">
             <label>Filtrar por Rol:</label>
-            <select [(ngModel)]="roleFilter">
+            <select [(ngModel)]="roleFilter" (ngModelChange)="onFilterChange()">
                 <option value="all">Todos los Roles</option>
                 <option value="administrador">Administradores</option>
                 <option value="director">Directores</option>
@@ -83,15 +83,14 @@
         <!-- Users List -->
         <div class="users-section card">
             <div class="user-list">
-                <div class="user-item" *ngFor="let user of filteredUsers" [class.inactive]="!user.is_active">
+                <div class="user-item" *ngFor="let user of paginatedUsers" [class.inactive]="!user.is_active">
                     <div class="user-avatar" [class.inactive]="!user.is_active">
                         {{ user.username.substring(0, 1).toUpperCase() }}
                     </div>
                     <div class="user-body">
                         <div class="name-row">
                             <strong>{{ user.full_name || user.username }}</strong>
-                            <span class="role-badge" [class]="user.role || 'usuario'">{{ user.role || 'usuario'
-                                }}</span>
+                            <span class="role-badge" [class]="user.role || 'usuario'">{{ user.role || 'usuario' }}</span>
                             <span *ngIf="!user.is_active" class="status-badge">Inactivo</span>
                         </div>
                         <span class="user-email">{{ user.email }}</span>
@@ -127,6 +126,19 @@
                     <i class="fas fa-user-slash"></i>
                     <p>No se encontraron usuarios con esos filtros.</p>
                 </div>
+            </div>
+
+            <!-- Pagination Controls -->
+            <div class="pagination-controls" *ngIf="filteredUsers.length > 0">
+                <button class="btn btn-icon" [disabled]="currentPage === 1" (click)="changePage(currentPage - 1)" title="Anterior">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <div class="page-info">
+                    Página <strong>{{ currentPage }}</strong> de <strong>{{ totalPages }}</strong>
+                </div>
+                <button class="btn btn-icon" [disabled]="currentPage === totalPages" (click)="changePage(currentPage + 1)" title="Siguiente">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
             </div>
         </div>
 

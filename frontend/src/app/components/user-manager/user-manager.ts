@@ -48,6 +48,10 @@ export class UserManager implements OnInit {
     this.loadAllProjects();
   }
 
+  // Pagination
+  currentPage = 1;
+  pageSize = 15;
+
   get filteredUsers(): User[] {
     return this.users.filter(user => {
       const matchesSearch =
@@ -59,6 +63,26 @@ export class UserManager implements OnInit {
 
       return matchesSearch && matchesRole;
     });
+  }
+
+  get paginatedUsers(): User[] {
+    const start = (this.currentPage - 1) * this.pageSize;
+    const end = start + this.pageSize;
+    return this.filteredUsers.slice(start, end);
+  }
+
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.filteredUsers.length / this.pageSize));
+  }
+
+  changePage(page: number) {
+    if (page >= 1 && page <= this.totalPages) {
+      this.currentPage = page;
+    }
+  }
+
+  onFilterChange() {
+    this.currentPage = 1;
   }
 
   loadUsers() {

@@ -51,7 +51,7 @@ export class AuthService {
     }
 
     getUsers(): Observable<User[]> {
-        return this.http.get<User[]>(`${this.baseUrl}/users/`);
+        return this.http.get<User[]>(`${this.baseUrl}/users/?limit=5000`);
     }
 
     createUser(user: any): Observable<User> {
