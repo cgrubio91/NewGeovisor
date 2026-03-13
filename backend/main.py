@@ -243,7 +243,8 @@ def read_project(project_id: int, db: Session = Depends(get_db), current_user: m
     project = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    if project.owner_id != current_user.id and current_user not in project.assigned_users:
+    is_admin_or_super = current_user.role == 'administrador' or getattr(current_user, 'is_superuser', False)
+    if not is_admin_or_super and project.owner_id != current_user.id and current_user not in project.assigned_users:
         raise HTTPException(status_code=403, detail="Access denied")
     # Incrementar contador de visitas
     project.visit_count = (project.visit_count or 0) + 1
@@ -1045,7 +1046,7 @@ async def generar_reporte_registros(
     request: GenerarReporteRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    current_user: models.User = Depends(check_role(['administrador', 'director']))
 ):
     """
     Genera un reporte de registros con análisis geográfico.
@@ -1098,6 +1099,22 @@ async def generar_reporte_registros(
             mongo_pid = db_project.mongodb_id
             logger.info(f"Proyecto identificado: {db_project.name} (DB ID: {db_project.id}, Mongo ID: {mongo_pid})")
 
+        # --- VERIFICACIÓN DE PERMISOS (Director solo ve sus proyectos) ---
+        is_admin_or_super = current_user.role == 'administrador' or getattr(current_user, 'is_superuser', False)
+        if not is_admin_or_super:
+            allowed_pids = [p.mongodb_id for p in current_user.assigned_projects if p.mongodb_id] + \
+                           [p.mongodb_id for p in current_user.owned_projects if p.mongodb_id]
+            
+            if not allowed_pids:
+                raise HTTPException(status_code=403, detail="No tienes proyectos asignados para consultar registros.")
+                
+            if mongo_pid and mongo_pid not in allowed_pids:
+                raise HTTPException(status_code=403, detail="No tienes acceso a los registros de este proyecto.")
+            
+            # Si no solicitó un proyecto específico, restringir la búsqueda a solo sus proyectos permitidos
+            if not mongo_pid:
+                mongo_pid = allowed_pids
+
         # Crear analizador
         analizador = crear_analizador_desde_env(kml_base_path="kml_proyectos")
         
@@ -1135,8 +1152,11 @@ async def generar_reporte_registros(
                         logger.info(f"Geocerca de OFICINA cargada desde capa: {l.name}")
         
         # Si no se encontró proyecto en DB pero se tiene un ID directo (fallback)
-        if not mongo_pid and request.pid_filtro and not str(request.pid_filtro).isdigit():
-            mongo_pid = request.pid_filtro
+        if (not mongo_pid or isinstance(mongo_pid, list)) and request.pid_filtro and not str(request.pid_filtro).isdigit():
+            pid_str = str(request.pid_filtro)
+            if not is_admin_or_super and pid_str not in allowed_pids:
+                raise HTTPException(status_code=403, detail="No tienes acceso a los registros de este proyecto.")
+            mongo_pid = pid_str
 
         # Generar reporte con polígonos explícitos (si se encontraron)
         df = analizador.generar_reporte(
@@ -1162,8 +1182,12 @@ async def generar_reporte_registros(
         nombre_archivo = f"Reporte_Registros_{timestamp}.xlsx"
         ruta_archivo = os.path.join("report", nombre_archivo)
         
-        # Guardar Excel
+        nombre_archivo_kml = f"Reporte_Registros_{timestamp}.kml"
+        ruta_archivo_kml = os.path.join("report", nombre_archivo_kml)
+        
+        # Guardar Excel y KML
         analizador.exportar_a_excel(df, ruta_archivo)
+        analizador.exportar_a_kml(df, ruta_archivo_kml)
         
         # Generar estadísticas rápidas
         stats = {
@@ -1215,10 +1239,12 @@ async def generar_reporte_registros(
             "status": "success",
             "mensaje": f"Reporte generado exitosamente con {len(df)} registros",
             "archivo": ruta_archivo,
+            "archivo_kml": ruta_archivo_kml,
             "total_registros": len(df),
             "estadisticas": stats,
             "records": records,
             "url_descarga": f"/files/{nombre_archivo}",
+            "url_descarga_kml": f"/files/{nombre_archivo_kml}",
             "timestamp": timestamp
         }
     

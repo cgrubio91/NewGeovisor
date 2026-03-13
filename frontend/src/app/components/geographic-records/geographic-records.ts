@@ -321,7 +321,7 @@ export class GeographicRecordsComponent implements OnInit, OnDestroy {
     .subscribe({
       next: (response: ReportResponse) => {
         if (response.archivo) {
-          const filename = response.archivo.split('\\').pop() || 'reporte.xlsx';
+          const filename = response.archivo.split('\\').pop()?.split('/').pop() || 'reporte.xlsx';
           this.geoService.downloadReport(filename).subscribe({
             next: (blob) => {
               const url = window.URL.createObjectURL(blob);
@@ -340,6 +340,59 @@ export class GeographicRecordsComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         this.toastService.show('Error generando el reporte', 'error');
+      }
+    });
+  }
+
+  /**
+   * Descarga el reporte en KML
+   */
+  downloadKml() {
+    if (!this.filterForm.valid) {
+      this.toastService.show('Por favor ejecuta primero una búsqueda', 'warning');
+      return;
+    }
+
+    const formValue = this.filterForm.value;
+    this.isLoading = true;
+
+    this.geoService.generateReport(
+      formValue.fechaInicio,
+      formValue.fechaFin,
+      formValue.proyecto,
+      formValue.usuario,
+      formValue.nombreProyecto
+    )
+    .pipe(
+      finalize(() => {
+        this.isLoading = false;
+      }),
+      takeUntil(this.destroy$)
+    )
+    .subscribe({
+      next: (response: ReportResponse) => {
+        if (response.archivo_kml) {
+          const filename = response.archivo_kml.split('\\').pop()?.split('/').pop() || 'reporte.kml';
+          this.geoService.downloadReport(filename).subscribe({
+            next: (blob) => {
+              const url = window.URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = filename;
+              link.click();
+              window.URL.revokeObjectURL(url);
+              this.toastService.show('KML descargado exitosamente', 'success');
+            },
+            error: () => {
+              this.toastService.show('Error descargando el KML', 'error');
+            }
+          });
+        } else {
+          this.toastService.show('El servidor no generó el archivo KML', 'warning');
+        }
+      },
+      error: (error) => {
+        this.toastService.show('Error generando el reporte KML', 'error');
       }
     });
   }

@@ -51,7 +51,8 @@ import { AuthService } from '../../services/auth.service';
             <span>Visor de Mapas</span>
           </a>
           
-          <a routerLink="/records" routerLinkActive="active" class="nav-item">
+          <a *ngIf="authService.currentUser()?.role === 'administrador' || authService.currentUser()?.role === 'director'" 
+                  routerLink="/records" routerLinkActive="active" class="nav-item">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z"></path>
               <polyline points="9 3 9 21"></polyline>

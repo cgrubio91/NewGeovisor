@@ -21,12 +21,14 @@ export interface ReportResponse {
   status: string;
   mensaje: string;
   archivo?: string;
+  archivo_kml?: string;
   total_registros: number;
   estadisticas?: {
     [key: string]: number;
   };
   records?: GeoRecord[];
   url_descarga?: string;
+  url_descarga_kml?: string;
 }
 
 @Injectable({

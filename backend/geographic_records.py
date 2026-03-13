@@ -83,35 +83,18 @@ class GeographicRecordsAnalyzer:
             k = kml.KML()
             k.from_string(content)
             
-            poligonos = []
-
-            def extraer_geometrias(element):
-                if hasattr(element, 'features'):
-                    for feature in element.features():
-                        extraer_geometrias(feature)
-                
-                if hasattr(element, 'geometry') and element.geometry:
-                    geom = element.geometry
-                    # Intentar convertir geometry de fastkml a shapely geometry
-                    if hasattr(geom, '__geo_interface__'):
-                        from shapely.geometry import shape
-                        s_geom = shape(geom.__geo_interface__)
-                        if s_geom.geom_type in ['Polygon', 'MultiPolygon']:
-                            poligonos.append(s_geom)
-
-            extraer_geometrias(k)
+            features = list(k.features())
+            if not features: return None
+            placemarks = list(features[0].features())
+            for p in placemarks:
+                if hasattr(p, 'geometry') and hasattr(p.geometry, 'exterior'):
+                    return Polygon(p.geometry.exterior.coords)
+                elif hasattr(p, 'features'):
+                    for sub_p in p.features():
+                        if hasattr(sub_p.geometry, 'exterior'):
+                            return Polygon(sub_p.geometry.exterior.coords)
             
-            if not poligonos:
-                logger.warning(f"No se encontraron polígonos en {path}")
-                return None
-            
-            # Combinar todos los polígonos encontrados en uno solo
-            from shapely.ops import unary_union
-            union = unary_union(poligonos)
-            
-            # buffer(0.0005) es aprox 50 metros de tolerancia para cubrir imprecisiones de GPS
-            # y asegurar que puntos en el borde o muy cerca entren en la clasificación.
-            return union.buffer(0.0005) if not union.is_empty else None
+            return None
         
         except Exception as e:
             logger.error(f"Error avanzado cargando geocerca {path}: {str(e)}")
@@ -177,12 +160,12 @@ class GeographicRecordsAnalyzer:
         
         # 1. Verificar polígono de obra (Prioridad: override -> file)
         p_obra = p_obra_override or self.obtener_poligono_trabajo(pid)
-        if p_obra and p_obra.intersects(punto):
+        if p_obra and (p_obra.contains(punto) or p_obra.intersects(punto)):
             return "EN OBRA"
         
         # 2. Verificar polígono de oficina (Prioridad: override -> file)
         p_ofi = p_ofi_override or self.obtener_poligono_oficina(pid)
-        if p_ofi and p_ofi.intersects(punto):
+        if p_ofi and (p_ofi.contains(punto) or p_ofi.intersects(punto)):
             return "EN OFICINA"
         
         return "UBICACIÓN EXTERNA"
@@ -226,7 +209,10 @@ class GeographicRecordsAnalyzer:
         }
         
         if pid_filtro:
-            match_filter["pid"] = pid_filtro
+            if isinstance(pid_filtro, list):
+                match_filter["pid"] = {"$in": pid_filtro}
+            else:
+                match_filter["pid"] = pid_filtro
         
         if user_filtro:
             match_filter["user"] = user_filtro
@@ -380,6 +366,94 @@ class GeographicRecordsAnalyzer:
         os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
         df.to_excel(output_path, index=False, sheet_name='Registros')
         logger.info(f"✅ Archivo Excel guardado: {output_path}")
+        return output_path
+    
+    def exportar_a_kml(self, df: pd.DataFrame, output_path: str) -> str:
+        """
+        Exporta el DataFrame a un archivo KML con estilos de colores basados en la clasificación.
+        
+        Args:
+            df: DataFrame con los registros
+            output_path: Ruta donde guardar el archivo KML
+            
+        Returns:
+            Ruta al archivo KML creado
+        """
+        import codecs
+        os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
+        
+        kml_content = [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<kml xmlns="http://www.opengis.net/kml/2.2">',
+            '  <Document>',
+            '    <name>Reporte de Registros SEGMAB</name>',
+            '    <Style id="style-obra">',
+            '      <IconStyle>',
+            '        <color>ff00ff00</color> <!-- Verde -->',
+            '        <scale>1.2</scale>',
+            '        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon>',
+            '      </IconStyle>',
+            '    </Style>',
+            '    <Style id="style-oficina">',
+            '      <IconStyle>',
+            '        <color>ff00ffff</color> <!-- Amarillo -->',
+            '        <scale>1.2</scale>',
+            '        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon>',
+            '      </IconStyle>',
+            '    </Style>',
+            '    <Style id="style-externa">',
+            '      <IconStyle>',
+            '        <color>ff0000ff</color> <!-- Rojo -->',
+            '        <scale>1.2</scale>',
+            '        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon>',
+            '      </IconStyle>',
+            '    </Style>'
+        ]
+        
+        for _, row in df.iterrows():
+            clasif = str(row.get('Clasificación', 'UBICACIÓN EXTERNA')).upper()
+            if 'OBRA' in clasif:
+                style_id = '#style-obra'
+            elif 'OFICINA' in clasif:
+                style_id = '#style-oficina'
+            else:
+                style_id = '#style-externa'
+                
+            lat = row.get('Norte (Lat)')
+            lon = row.get('Este (Lon)')
+            if pd.isna(lat) or pd.isna(lon):
+                continue
+                
+            name = f"{row.get('Fecha del registro', 'Sin fecha')} - {row.get('Colaborador', 'Desconocido')}"
+            desc = f"""<![CDATA[
+            <b>Proyecto:</b> {row.get('Proyecto', 'N/A')}<br>
+            <b>Colaborador:</b> {row.get('Colaborador', 'N/A')}<br>
+            <b>Cargo:</b> {row.get('Cargo', 'N/A')}<br>
+            <b>Correo:</b> {row.get('Correo', 'N/A')}<br>
+            <b>Fecha:</b> {row.get('Fecha del registro', 'N/A')}<br>
+            <b>Formato:</b> {row.get('Formato', 'N/A')}<br>
+            <b>Clasificación:</b> {clasif}<br>
+            <br>
+            <a href="{row.get('URL Registro', '#')}">Ver registro en SEGMAB</a>
+            ]]>"""
+            
+            kml_content.extend([
+                '    <Placemark>',
+                f'      <name><![CDATA[{name}]]></name>',
+                f'      <description>{desc}</description>',
+                f'      <styleUrl>{style_id}</styleUrl>',
+                '      <Point>',
+                f'        <coordinates>{lon},{lat},0</coordinates>',
+                '      </Point>',
+                '    </Placemark>'
+            ])
+            
+        kml_content.extend(['  </Document>', '</kml>'])
+        
+        with codecs.open(output_path, 'w', encoding='utf-8') as f:
+            f.write('\\n'.join(kml_content))
+            
+        logger.info(f"✅ Archivo KML guardado: {output_path}")
         return output_path
     
     def limpiar_cache(self):
