@@ -605,25 +605,37 @@ async def upload_files(
         # Lógica especial para Geocercas (KML/KMZ)
         if geofence_type in ["intervencion", "oficina"] and ext in [".kml", ".kmz"]:
             suffix = "_oficina" if geofence_type == "oficina" else ""
-            # Si es intervención, no lleva sufijo para mantener compatibilidad con el código anterior
             filename = f"{mongo_pid}{suffix}{ext}"
-            geofence_dir = "kml_proyectos"
-            os.makedirs(geofence_dir, exist_ok=True)
-            file_path = os.path.normpath(os.path.join(geofence_dir, filename))
+            # Guardar EN UPLOADS para que el frontend pueda acceder vía HTTP,
+            # y TAMBIÉN copiar a kml_proyectos/ para el análisis geográfico
+            save_dir = UPLOAD_DIR
+            kml_proyectos_dir = "kml_proyectos"
+            os.makedirs(kml_proyectos_dir, exist_ok=True)
         else:
-            file_path = os.path.normpath(os.path.join(UPLOAD_DIR, filename))
+            save_dir = UPLOAD_DIR
         
-        # Evitar sobrescribir archivos existentes
+        file_path = os.path.normpath(os.path.join(save_dir, filename))
+        
+        # Evitar sobrescribir archivos existentes (usar save_dir, no UPLOAD_DIR)
         counter = 1
-        name, ext_orig = os.path.splitext(filename)
+        name_base, ext_orig = os.path.splitext(filename)
         while os.path.exists(file_path):
-            filename = f"{name}_{counter}{ext_orig}"
-            file_path = os.path.join(UPLOAD_DIR, filename)
+            filename = f"{name_base}_{counter}{ext_orig}"
+            file_path = os.path.normpath(os.path.join(save_dir, filename))
             counter += 1
 
         # Guardar archivo
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
+        
+        # Si es geocerca, también copiar a kml_proyectos/ para el análisis geográfico retrocompatible
+        if geofence_type in ["intervencion", "oficina"] and ext in [".kml", ".kmz"]:
+            try:
+                kml_copy_path = os.path.join(kml_proyectos_dir, os.path.basename(file_path))
+                shutil.copy2(file_path, kml_copy_path)
+                logger.info(f"Geocerca copiada también a: {kml_copy_path}")
+            except Exception as e:
+                logger.warning(f"No se pudo copiar geocerca a kml_proyectos: {e}")
         
         # Si es KMZ, descomprimir para obtener el KML y usar ese archivo en su lugar
         if filename.lower().endswith('.kmz'):
@@ -705,9 +717,16 @@ async def upload_files(
                 "metadata": metadata
             })
 
+            # Nombre visible para la capa
+            if geofence_type in ["intervencion", "oficina"] and ext in [".kml", ".kmz"]:
+                layer_display_name = "Zona de Intervención" if geofence_type == "intervencion" else "Zona de Oficina"
+            else:
+                # El nombre se calcula DESPUES de resolver el filename final
+                layer_display_name = os.path.splitext(os.path.basename(file_path))[0]
+
             # Crear capa en la base de datos
             layer_in = schemas.LayerCreate(
-                name=name,  # Nombre sin extensión
+                name=layer_display_name,
                 layer_type=layer_type,
                 file_format=file_format,
                 file_path=file_path,
@@ -717,6 +736,7 @@ async def upload_files(
                 visible=True,
                 opacity=100,
                 z_index=0,
+                geofence_type=geofence_type if geofence_type in ["intervencion", "oficina"] else "ninguno",
                 settings={**metadata, "original_path": file_path},
                 processing_status="processing" if layer_type in ['point_cloud', '3d_model'] else ("pending" if layer_type == 'raster' else "completed"),
                 processing_progress=0 if layer_type in ['point_cloud', '3d_model', 'raster'] else 100
@@ -1061,36 +1081,72 @@ async def generar_reporte_registros(
         
         logger.info(f"Generando reporte: {fecha_inicio} - {fecha_fin} (usuario: {current_user.username})")
         
-        # Si se recibe pid_filtro, determinar si es un ID de PostgreSQL o MongoDB
+        # 1. Resolver Proyecto en PostgreSQL para obtener geocercas
+        db_project = None
         mongo_pid = None
         nombre_proyecto_filtro = request.nombre_proyecto_filtro
         
         if request.pid_filtro:
-            # Si es un ID numérico (PostgreSQL), intentamos resolver el nombre
             pid_str = str(request.pid_filtro)
             if pid_str.isdigit():
-                try:
-                    proyecto = db.query(models.Project).filter(models.Project.id == int(request.pid_filtro)).first()
-                    if proyecto:
-                        nombre_proyecto_filtro = proyecto.name
-                        logger.info(f"Proyecto PostgreSQL ID {request.pid_filtro} → Nombre: '{nombre_proyecto_filtro}'")
-                except Exception as e:
-                    logger.error(f"Error al resolver proyecto PostgreSQL: {str(e)}")
+                db_project = db.query(models.Project).filter(models.Project.id == int(pid_str)).first()
             else:
-                # Si no es numérico, asumimos que es un ID de MongoDB (o un string/hex)
-                mongo_pid = request.pid_filtro
-                logger.info(f"Usando ID de MongoDB directamente: {mongo_pid}")
+                db_project = db.query(models.Project).filter(models.Project.mongodb_id == pid_str).first()
         
-        # Crear analizador apuntando a la carpeta de geocercas correcta
+        if db_project:
+            nombre_proyecto_filtro = db_project.name
+            mongo_pid = db_project.mongodb_id
+            logger.info(f"Proyecto identificado: {db_project.name} (DB ID: {db_project.id}, Mongo ID: {mongo_pid})")
+
+        # Crear analizador
         analizador = crear_analizador_desde_env(kml_base_path="kml_proyectos")
         
-        # Generar reporte
+        # --- CARGAR GEOCERCAS DINÁMICAS DESDE LA DB ---
+        p_obra = None
+        p_ofi = None
+        
+        if db_project:
+            # Buscar capas marcadas como intervención u oficina para este proyecto
+            layers_geofence = db.query(models.Layer).filter(
+                models.Layer.project_id == db_project.id,
+                models.Layer.geofence_type.in_(['intervencion', 'oficina'])
+            ).all()
+            
+            for l in layers_geofence:
+                # Buscar archivo en kml_proyectos o uploads
+                posibles_rutas = [
+                    os.path.join("kml_proyectos", l.file_path),
+                    os.path.join("uploads", l.file_path),
+                    l.file_path # Ruta absoluta si existe
+                ]
+                
+                poly = None
+                for ruta in posibles_rutas:
+                    if os.path.exists(ruta):
+                        poly = analizador.cargar_poligono_geocerca(ruta)
+                        if poly: break
+                
+                if poly:
+                    if l.geofence_type == 'intervencion':
+                        p_obra = poly
+                        logger.info(f"Geocerca de OBRA cargada desde capa: {l.name}")
+                    elif l.geofence_type == 'oficina':
+                        p_ofi = poly
+                        logger.info(f"Geocerca de OFICINA cargada desde capa: {l.name}")
+        
+        # Si no se encontró proyecto en DB pero se tiene un ID directo (fallback)
+        if not mongo_pid and request.pid_filtro and not str(request.pid_filtro).isdigit():
+            mongo_pid = request.pid_filtro
+
+        # Generar reporte con polígonos explícitos (si se encontraron)
         df = analizador.generar_reporte(
             fecha_inicio=fecha_inicio,
             fecha_fin=fecha_fin,
-            pid_filtro=mongo_pid,  # Pasar el ID de MongoDB si existe
+            pid_filtro=mongo_pid,
             user_filtro=request.user_filtro,
-            nombre_proyecto_filtro=nombre_proyecto_filtro
+            nombre_proyecto_filtro=nombre_proyecto_filtro,
+            p_obra_explicit=p_obra,
+            p_ofi_explicit=p_ofi
         )
         
         if len(df) == 0:
@@ -1280,11 +1336,12 @@ async def sync_mongodb_data(
         # Map to store mongo_project_id -> postgres_project_id
         project_map = {}
         
-        # 2. Sincronizar Proyectos
+        # 2. Sincronizar Proyectos y sus Usuarios internos
         for m_proy in mongo_projects:
             m_id = str(m_proy["_id"])
             name = m_proy.get("name", "Sin nombre")
             description = m_proy.get("description", "")
+            m_users = m_proy.get("users", []) # Lista de usuarios dentro del proyecto
             
             # Buscar por mongodb_id preferiblemente, luego por nombre (migración)
             db_proy = db.query(models.Project).filter(
@@ -1311,63 +1368,79 @@ async def sync_mongodb_data(
                 results["projects_updated"] += 1
             
             project_map[m_id] = db_proy.id
-        
-        # 3. Sincronizar Usuarios y Asignaciones
+
+            # Sincronizar usuarios LISTADOS DENTRO del proyecto
+            for m_u in m_users:
+                u_email = m_u.get("email")
+                if not u_email: continue
+                
+                u_email = u_email.strip().lower()
+                if not u_email or '@' not in u_email: continue
+
+                # Buscar por email primero
+                db_user = db.query(models.User).filter(models.User.email == u_email).first()
+                if not db_user:
+                    # Si no existe por email, verificar si el username está tomado
+                    base_username = u_email.split('@')[0]
+                    u_count = 0
+                    final_username = base_username
+                    while db.query(models.User).filter(models.User.username == final_username).first():
+                        u_count += 1
+                        final_username = f"{base_username}{u_count}"
+                    
+                    import uuid
+                    user_in = schemas.UserCreate(
+                        email=u_email,
+                        username=final_username,
+                        full_name=base_username,
+                        password=str(uuid.uuid4())[:12],
+                        role="usuario"
+                    )
+                    db_user = crud.create_user(db, user_in)
+                    results["users_created"] += 1
+                
+                # Asignar al proyecto si no está
+                is_assigned = db.query(models.user_projects).filter(
+                    models.user_projects.c.user_id == db_user.id,
+                    models.user_projects.c.project_id == db_proy.id
+                ).first()
+                
+                if not is_assigned:
+                    crud.assign_user_to_project(db, db_user.id, db_proy.id)
+                    results["assignments_created"] += 1
+
+        # 3. Sincronizar resto de Usuarios desde la colección users (Opcional, para asegurar perfiles completos)
         for m_user in mongo_users:
             email = m_user.get("email")
             display_name = m_user.get("displayName", "")
             m_projects = m_user.get("projects", [])
             m_u_id = str(m_user.get("_id", ""))
             
-            if not email:
-                continue
-            
-            # Limpiar email
-            email = email.strip().rstrip('_').strip()
-            if not email or '@' not in email:
-                continue
+            if not email: continue
+            email = email.strip().lower()
+            if not email or '@' not in email: continue
                 
-            # Buscar por mongodb_id o email
             db_user = db.query(models.User).filter(
                 (models.User.mongodb_id == m_u_id) | (models.User.email == email)
             ).first()
             
-            if not db_user:
-                # Crear usuario
-                import uuid
-                user_in = schemas.UserCreate(
-                    email=email,
-                    username=email.split('@')[0],
-                    full_name=display_name,
-                    password=str(uuid.uuid4())[:12],
-                    role="usuario"
-                )
-                db_user = crud.create_user(db, user_in)
+            if db_user:
                 db_user.mongodb_id = m_u_id
-                results["users_created"] += 1
-            else:
-                # Actualizar mongodb_id
-                db_user.mongodb_id = m_u_id
-                if not db_user.full_name:
+                if not db_user.full_name or db_user.full_name == db_user.username:
                     db_user.full_name = display_name
-                results["users_updated"] += 1
-            
-            db.flush()
-            
-            # Asignar proyectos
-            for m_pid in m_projects:
-                m_pid_str = str(m_pid)
-                if m_pid_str in project_map:
-                    p_id = project_map[m_pid_str]
-                    # Verificar si ya está asignado
-                    is_assigned = db.query(models.user_projects).filter(
-                        models.user_projects.c.user_id == db_user.id,
-                        models.user_projects.c.project_id == p_id
-                    ).first()
-                    
-                    if not is_assigned:
-                        crud.assign_user_to_project(db, db_user.id, p_id)
-                        results["assignments_created"] += 1
+                
+                # También asignar proyectos que el usuario diga tener
+                for m_pid in m_projects:
+                    m_pid_str = str(m_pid)
+                    if m_pid_str in project_map:
+                        p_id = project_map[m_pid_str]
+                        is_assigned = db.query(models.user_projects).filter(
+                            models.user_projects.c.user_id == db_user.id,
+                            models.user_projects.c.project_id == p_id
+                        ).first()
+                        if not is_assigned:
+                            crud.assign_user_to_project(db, db_user.id, p_id)
+                            results["assignments_created"] += 1
         
         db.commit()
         return {

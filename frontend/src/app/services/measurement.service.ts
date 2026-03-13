@@ -448,9 +448,15 @@ export class MeasurementService {
     async deleteMeasurement(id: number) {
         try {
             await firstValueFrom(this.http.delete(`${this.api.getApiUrl()}/measurements/${id}`));
+        } catch (error: any) {
+            // Si el servidor dice 404, la medición ya no existe en el servidor.
+            // Igual recargamos la lista para limpiar la UI.
+            if (error?.status !== 404) {
+                console.error('Error deleting measurement:', error);
+            }
+        } finally {
+            // Siempre recargamos para quitar de la UI cualquier medida obsoleta
             this.loadMeasurements(this.activeProject_id!);
-        } catch (error) {
-            console.error('Error deleting measurement:', error);
         }
     }
 

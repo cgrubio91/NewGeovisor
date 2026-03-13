@@ -50,6 +50,7 @@ export interface Layer {
     rotation?: { heading: number, pitch: number, roll: number }; // 3D local rotation
     processing_status?: 'pending' | 'processing' | 'completed' | 'failed';
     processing_progress?: number;
+    geofence_type?: 'intervencion' | 'oficina' | 'ninguno';
 }
 
 export interface Measurement {

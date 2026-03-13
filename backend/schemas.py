@@ -48,6 +48,7 @@ class LayerBase(BaseModel):
     settings: Optional[dict] = {}
     processing_status: Optional[str] = "completed"
     processing_progress: Optional[int] = 100
+    geofence_type: Optional[str] = "ninguno"
     
 class LayerCreate(LayerBase):
     project_id: int
@@ -60,6 +61,7 @@ class LayerUpdate(BaseModel):
     z_index: Optional[int] = None
     settings: Optional[dict] = None
     folder_id: Optional[int] = None
+    geofence_type: Optional[str] = None
 
 class LayerRead(LayerBase):
     id: int

@@ -128,6 +128,10 @@ import { Layer, Folder } from '../../models/models';
                     (dblclick)="openRenameModal(layer)">
                 {{ layer.name }}
               </span>
+              <div class="layer-badges">
+                <span class="badge obra" *ngIf="layer.geofence_type === 'intervencion'" title="Usado como Área de Intervención">OBRA</span>
+                <span class="badge oficina" *ngIf="layer.geofence_type === 'oficina'" title="Usado como Área de Oficina">OFICINA</span>
+              </div>
             </div>
             
             <div class="layer-actions">
@@ -147,6 +151,10 @@ import { Layer, Folder } from '../../models/models';
                   <a (click)="openRenameModal(layer)">Renombrar</a>
                   <a (click)="moveLayer(layer, undefined)">Mover a Raíz</a>
                   <a *ngFor="let f of folders" (click)="moveLayer(layer, f.id)">Mover a {{f.name}}</a>
+                  <hr>
+                  <a (click)="setGeofenceType(layer, 'intervencion')">Marcar como Área de Obra</a>
+                  <a (click)="setGeofenceType(layer, 'oficina')">Marcar como Área Oficina</a>
+                  <a (click)="setGeofenceType(layer, 'ninguno')">Quitar Marca Geocerca</a>
                   <hr>
                   <a class="text-danger" (click)="deleteLayer(layer)">Eliminar Capa</a>
                 </div>
@@ -379,6 +387,14 @@ import { Layer, Folder } from '../../models/models';
     .empty-folder { font-size: 0.7rem; padding: 5px; color: #64748b; font-style: italic; }
     .empty-state { text-align: center; padding: 30px; color: #64748b; font-size: 0.85rem; }
 
+    .layer-badges { display: flex; gap: 4px; margin-top: 2px; }
+    .badge {
+        font-size: 0.65rem; padding: 1px 4px; border-radius: 4px; font-weight: bold;
+        text-transform: uppercase;
+    }
+    .badge.obra { background: #4caf50; color: white; }
+    .badge.oficina { background: #ffeb3b; color: #333; }
+
     /* Compare Section */
     .compare-section {
       padding: 12px;
@@ -593,6 +609,15 @@ export class LayerControlComponent implements OnInit {
       next: () => {
         this.mapService.removeLayer(layer.id);
         this.toastService.show('Capa eliminada', 'success');
+      },
+      error: (err) => {
+        // Si el servidor dice 404, es que ya no existe, la quitamos de todos modos
+        if (err.status === 404) {
+          this.mapService.removeLayer(layer.id);
+          this.toastService.show('La capa ya no existía en el servidor, removida localmente', 'info');
+        } else {
+          this.toastService.show(`Error al eliminar: ${err.message || 'Error desconocido'}`, 'error');
+        }
       }
     });
   }
@@ -728,5 +753,17 @@ export class LayerControlComponent implements OnInit {
     } else {
       this.toastService.show('Necesitas al menos 2 capas para comparar', 'warning');
     }
+  }
+
+  setGeofenceType(layer: any, type: string) {
+    if (typeof layer.id !== 'number') return;
+    
+    this.projectService.updateLayer(layer.id, { geofence_type: type as any }).subscribe({
+      next: (updatedLayer) => {
+        layer.geofence_type = updatedLayer.geofence_type;
+        this.toastService.show(`Capa marcada como ${type}`, 'success');
+      },
+      error: () => this.toastService.show('Error al actualizar geocerca', 'error')
+    });
   }
 }

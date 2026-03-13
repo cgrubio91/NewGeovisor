@@ -10,7 +10,8 @@ from typing import List, Optional, Dict, Any
 from pathlib import Path
 from zipfile import ZipFile
 from fastkml import kml
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, MultiPolygon, shape
+from shapely.geometry.base import BaseGeometry
 from sshtunnel import SSHTunnelForwarder
 from pymongo import MongoClient
 import logging
@@ -55,63 +56,68 @@ class GeographicRecordsAnalyzer:
         self.cache_obra: Dict[str, Optional[Polygon]] = {}
         self.cache_oficina: Dict[str, Optional[Polygon]] = {}
     
-    def cargar_poligono_geocerca(self, path: str) -> Optional[Polygon]:
+    def cargar_poligono_geocerca(self, path: str) -> Optional[BaseGeometry]:
         """
-        Carga un polígono desde un archivo KML o KMZ.
+        Carga y combina todos los polígonos desde un archivo KML o KMZ.
         
         Args:
             path: Ruta al archivo KML/KMZ
             
         Returns:
-            shapely.Polygon si se cargó exitosamente, None en caso contrario
+            shapely geometry (Polygon, MultiPolygon or any result of unary_union)
         """
         if not os.path.exists(path):
             logger.debug(f"Archivo no encontrado: {path}")
             return None
         
         try:
-            # Determinar si es KMZ (ZIP) o KML directamente
             if path.lower().endswith('.kmz'):
                 with ZipFile(path, 'r') as z:
-                    # Buscar archivo KML dentro del ZIP
                     kml_files = [f for f in z.namelist() if f.lower().endswith('.kml')]
-                    if not kml_files:
-                        logger.warning(f"No KML file found inside {path}")
-                        return None
+                    if not kml_files: return None
                     content = z.read(kml_files[0])
             else:
                 with open(path, 'rb') as f:
                     content = f.read()
             
-            # Parsear KML
             k = kml.KML()
             k.from_string(content)
-            features = list(k.features())
             
-            if not features:
-                logger.warning(f"No features found in {path}")
+            poligonos = []
+
+            def extraer_geometrias(element):
+                if hasattr(element, 'features'):
+                    for feature in element.features():
+                        extraer_geometrias(feature)
+                
+                if hasattr(element, 'geometry') and element.geometry:
+                    geom = element.geometry
+                    # Intentar convertir geometry de fastkml a shapely geometry
+                    if hasattr(geom, '__geo_interface__'):
+                        from shapely.geometry import shape
+                        s_geom = shape(geom.__geo_interface__)
+                        if s_geom.geom_type in ['Polygon', 'MultiPolygon']:
+                            poligonos.append(s_geom)
+
+            extraer_geometrias(k)
+            
+            if not poligonos:
+                logger.warning(f"No se encontraron polígonos en {path}")
                 return None
             
-            # Buscar placemarks con geometría de polígono
-            placemarks = list(features[0].features())
-            for placemark in placemarks:
-                if hasattr(placemark, 'geometry'):
-                    geom = placemark.geometry
-                    # Buscar Polygon
-                    if hasattr(geom, 'exterior'):
-                        return Polygon(geom.exterior.coords)
-                
-                # Si tiene subfeaturas (DocumentoKML multinivel)
-                if hasattr(placemark, 'features'):
-                    for sub_placemark in placemark.features():
-                        if hasattr(sub_placemark.geometry, 'exterior'):
-                            return Polygon(sub_placemark.geometry.exterior.coords)
+            # Combinar todos los polígonos encontrados en uno solo
+            from shapely.ops import unary_union
+            union = unary_union(poligonos)
+            
+            # buffer(0.0005) es aprox 50 metros de tolerancia para cubrir imprecisiones de GPS
+            # y asegurar que puntos en el borde o muy cerca entren en la clasificación.
+            return union.buffer(0.0005) if not union.is_empty else None
         
         except Exception as e:
-            logger.error(f"Error cargando geocerca {path}: {str(e)}")
+            logger.error(f"Error avanzado cargando geocerca {path}: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None
-        
-        return None
     
     def obtener_poligono_trabajo(self, pid: str) -> Optional[Polygon]:
         """
@@ -151,7 +157,7 @@ class GeographicRecordsAnalyzer:
         
         return self.cache_oficina[pid]
     
-    def clasificar_ubicacion(self, pid: str, lat: float, lon: float) -> str:
+    def clasificar_ubicacion(self, pid: str, lat: float, lon: float, p_obra_override: Optional[BaseGeometry] = None, p_ofi_override: Optional[BaseGeometry] = None) -> str:
         """
         Clasifica la ubicación de un punto dentro de los polígonos del proyecto.
         
@@ -159,20 +165,24 @@ class GeographicRecordsAnalyzer:
             pid: ID del proyecto
             lat: Latitud en WGS84
             lon: Longitud en WGS84
+            p_obra_override: Polígono de obra pasado explícitamente
+            p_ofi_override: Polígono de oficina pasado explícitamente
             
         Returns:
             "EN OBRA", "EN OFICINA", o "UBICACIÓN EXTERNA"
         """
+        # El sistema usa (lat, lon) usualmente, Point de shapely es (x, y) = (lon, lat) para GeoJSON
+        # pero revisando el script del usuario, él usa Point(lon, lat).
         punto = Point(lon, lat)
         
-        # Verificar polígono de obra
-        p_obra = self.obtener_poligono_trabajo(pid)
-        if p_obra and p_obra.contains(punto):
+        # 1. Verificar polígono de obra (Prioridad: override -> file)
+        p_obra = p_obra_override or self.obtener_poligono_trabajo(pid)
+        if p_obra and p_obra.intersects(punto):
             return "EN OBRA"
         
-        # Verificar polígono de oficina
-        p_ofi = self.obtener_poligono_oficina(pid)
-        if p_ofi and p_ofi.contains(punto):
+        # 2. Verificar polígono de oficina (Prioridad: override -> file)
+        p_ofi = p_ofi_override or self.obtener_poligono_oficina(pid)
+        if p_ofi and p_ofi.intersects(punto):
             return "EN OFICINA"
         
         return "UBICACIÓN EXTERNA"
@@ -183,7 +193,9 @@ class GeographicRecordsAnalyzer:
         fecha_fin: datetime,
         pid_filtro: Optional[str] = None,
         user_filtro: Optional[str] = None,
-        nombre_proyecto_filtro: Optional[str] = None
+        nombre_proyecto_filtro: Optional[str] = None,
+        p_obra_explicit: Optional[BaseGeometry] = None,
+        p_ofi_explicit: Optional[BaseGeometry] = None
     ) -> pd.DataFrame:
         """
         Genera un reporte de registros geográficos con clasificación de ubicación.
@@ -315,8 +327,8 @@ class GeographicRecordsAnalyzer:
                         logger.debug(f"Registro {id_reg} con coordenadas inválidas, omitido")
                         continue
                     
-                    # Clasificar ubicación
-                    status = self.clasificar_ubicacion(pid, lat, lon)
+                    # Clasificar ubicación pasándole los polígonos explícitos si existen
+                    status = self.clasificar_ubicacion(pid, lat, lon, p_obra_explicit, p_ofi_explicit)
                     
                     # Agregar al resultado
                     results.append({
@@ -393,7 +405,7 @@ class GeographicRecordsAnalyzer:
                 client = MongoClient('127.0.0.1', server.local_bind_port)
                 db = client[self.db_name]
                 
-                projects = list(db.projects.find({}, {"name": 1, "description": 1, "owner": 1}))
+                projects = list(db.projects.find({}, {"name": 1, "description": 1, "owner": 1, "users": 1}))
                 for p in projects:
                     p["_id"] = str(p["_id"])
                 
@@ -427,7 +439,7 @@ class GeographicRecordsAnalyzer:
                     "email": 1, 
                     "displayName": 1, 
                     "organizations": 1,
-                    "projects": 1  # Asumimos que aquí están los IDs de proyectos
+                    "projects": 1  
                 }))
                 
                 for u in users:
