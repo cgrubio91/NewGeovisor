@@ -7,6 +7,8 @@ import pandas as pd
 from typing import List, Optional
 from datetime import datetime, timedelta, date
 from dotenv import load_dotenv
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 # --- LOAD ENVIRONMENT VARIABLES ---
 load_dotenv()
@@ -186,6 +188,81 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/auth/google", response_model=schemas.Token)
+async def google_auth(login_data: schemas.GoogleLogin, db: Session = Depends(get_db)):
+    try:
+        # Verificar el token de Google
+        # El CLIENT_ID debe estar en el .env
+        idinfo = id_token.verify_oauth2_token(
+            login_data.credential, 
+            requests.Request(), 
+            settings.GOOGLE_CLIENT_ID
+        )
+
+        # ID de usuario de Google: idinfo['sub']
+        email = idinfo['email']
+        full_name = idinfo.get('name')
+        
+        # Buscar usuario por email
+        user = crud.get_user_by_email(db, email=email)
+        
+        if not user:
+            # Crear usuario si no existe (Opcional: podrías preferir que solo entren si ya están registrados)
+            # Para Google Auth, generamos un username basado en el email
+            username = email.split('@')[0]
+            # Verificar si el username ya existe, si existe agregar sufijo
+            temp_username = username
+            counter = 1
+            while crud.get_user_by_username(db, username=temp_username):
+                temp_username = f"{username}{counter}"
+                counter += 1
+            username = temp_username
+            
+            import secrets
+            import string
+            # Generar una contraseña aleatoria segura (aunque no se usará)
+            random_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+            
+            user_in = schemas.UserCreate(
+                username=username,
+                email=email,
+                full_name=full_name,
+                password=random_password,
+                role="usuario"
+            )
+            user = crud.create_user(db, user_in)
+            logger.info(f"Nuevo usuario creado vía Google: {email}")
+
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Su usuario está desactivado. Contacte a soporte."
+            )
+
+        # Actualizar métricas
+        user.login_count = (user.login_count or 0) + 1
+        user.last_login = datetime.utcnow()
+        db.commit()
+
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.username}, expires_delta=access_token_expires
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+        
+    except ValueError as e:
+        # Token inválido
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid Google token: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Error en Google Auth: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Error interno en la autenticación con Google"
+        )
 
 @app.get("/users/me", response_model=schemas.UserRead)
 async def read_users_me(current_user: models.User = Depends(get_current_user)):

@@ -1,8 +1,11 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, OnInit, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
 import { ToastService } from '../../services/toast.service';
+import { environment } from '../../../environments/environment';
+
+declare var google: any;
 
 @Component({
   selector: 'app-login',
@@ -19,10 +22,10 @@ import { ToastService } from '../../services/toast.service';
 
         <form (ngSubmit)="onSubmit()" #loginForm="ngForm">
           <div class="form-group">
-            <label for="username">Correo Electrónico</label>
+            <label for="username">Correo Electrónico o Usuario</label>
             <div class="input-wrapper">
               <i class="fas fa-envelope"></i>
-              <input type="text" id="username" name="username" [(ngModel)]="username" required placeholder="tu@correo.com">
+              <input type="text" id="username" name="username" [(ngModel)]="username" required placeholder="tu@correo.com o usuario">
             </div>
           </div>
 
@@ -39,6 +42,14 @@ import { ToastService } from '../../services/toast.service';
             <span *ngIf="loading()" class="loader"></span>
           </button>
         </form>
+
+        <div class="divider">
+          <span>O bien</span>
+        </div>
+
+        <div id="googleBtnContainer" class="google-btn-container">
+          <!-- El botón de Google se renderizará aquí -->
+        </div>
 
         <div class="login-footer">
           <p>© 2026 GIS Geovisor Pro. Todos los derechos reservados.</p>
@@ -164,6 +175,33 @@ import { ToastService } from '../../services/toast.service';
       cursor: not-allowed;
     }
 
+    .divider {
+      display: flex;
+      align-items: center;
+      text-align: center;
+      margin: 25px 0;
+      color: #64748b;
+    }
+
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .divider span {
+      padding: 0 10px;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .google-btn-container {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+
     .login-footer {
       margin-top: 30px;
       text-align: center;
@@ -192,15 +230,57 @@ import { ToastService } from '../../services/toast.service';
     }
   `]
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   username = '';
   password = '';
   loading = signal(false);
 
   constructor(
     private authService: AuthService,
-    private toastService: ToastService
+    private toastService: ToastService,
+    private ngZone: NgZone
   ) { }
+
+  ngOnInit() {
+    this.initGoogleAuth();
+  }
+
+  initGoogleAuth() {
+    if (typeof google === 'undefined') {
+      setTimeout(() => this.initGoogleAuth(), 500);
+      return;
+    }
+
+    const clientId = environment.googleClientId;
+    if (!clientId) {
+      console.warn('Google Client ID no configurado en environment.ts');
+      return;
+    }
+
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (response: any) => this.ngZone.run(() => this.handleGoogleLogin(response))
+    });
+
+    google.accounts.id.renderButton(
+      document.getElementById('googleBtnContainer'),
+      { theme: 'outline', size: 'large', width: 370, text: 'signin_with', shape: 'pill' }
+    );
+  }
+
+  handleGoogleLogin(response: any) {
+    this.loading.set(true);
+    this.authService.loginWithGoogle(response.credential).subscribe({
+      next: () => {
+        this.loading.set(false);
+        this.toastService.show('Acceso con Google exitoso', 'success');
+      },
+      error: (err) => {
+        this.loading.set(false);
+        this.toastService.show('Error con Google: ' + (err.error?.detail || 'No se pudo autenticar'), 'error');
+      }
+    });
+  }
 
   onSubmit() {
     this.loading.set(true);

@@ -10,6 +10,9 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
+class GoogleLogin(BaseModel):
+    credential: str
+
 # User Schemas
 class UserBase(BaseModel):
     username: str

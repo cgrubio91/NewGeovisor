@@ -41,6 +41,15 @@ export class AuthService {
         );
     }
 
+    loginWithGoogle(credential: string): Observable<any> {
+        return this.http.post<any>(`${this.baseUrl}/auth/google`, { credential }).pipe(
+            tap(res => {
+                localStorage.setItem('token', res.access_token);
+                this.getCurrentUser().subscribe(user => this.currentUser.set(user));
+            })
+        );
+    }
+
     logout() {
         localStorage.removeItem('token');
         this.currentUser.set(null);

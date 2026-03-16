@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     ALLOWED_ORIGINS: str = "*"
     POSTGRES_DB: str = "geovisor_db"
     ENV: str = "development"
+    GOOGLE_CLIENT_ID: str = ""
 
     class Config:
         env_file = ".env"

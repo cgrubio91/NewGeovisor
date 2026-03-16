@@ -1,0 +1,85 @@
+[33m❯[39m Building...
+[32m✔[39m Building...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m             [2m | [22m [1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mscripts-BJL7FUZA.js[39m[2m | [22m[2mscripts[22m           [2m | [22m  [36m5.72 MB[39m[2m | [22m                [36m1.31 MB[39m
+[32mchunk-WZO3LNRD.js[39m  [2m | [22m[2m-[22m                 [2m | [22m[36m878.89 kB[39m[2m | [22m              [36m223.10 kB[39m
+[32mmain-5HWNQYPZ.js[39m   [2m | [22m[2mmain[22m              [2m | [22m[36m182.70 kB[39m[2m | [22m               [36m41.28 kB[39m
+[32mstyles-2BYEQL5E.css[39m[2m | [22m[2mstyles[22m            [2m | [22m [36m70.86 kB[39m[2m | [22m                [36m8.48 kB[39m
+
+[1m [22m                  [2m | [22m[1mInitial total[22m     [2m | [22m  [1m6.85 MB[22m[2m | [22m                [1m1.59 MB[22m
+
+[1mLazy chunk files[22m   [2m | [22m[1mNames[22m             [2m | [22m [1mRaw size[22m[2m | [22m[1mEstimated transfer size[22m
+[32mchunk-WWDBKIKD.js[39m  [2m | [22m[2mmap-view-component[22m[2m | [22m  [36m4.28 MB[39m[2m | [22m              [36m924.94 kB[39m
+
+Application bundle generation complete. [60.756 seconds] - 2026-03-16T20:36:13.973Z
+
+▲ [WARNING] NG8107: The left side of this optional chain operation does not include 'null' or 'undefined' in its type, therefore the '?.' operator can be replaced with the '.' operator. [plugin angular-compiler]
+
+    src/app/components/geographic-records/geographic-records.html:212:67:
+      212 │ ...s_Google'] || (record.coords?.lat + ', ' + record.coords?.lon) }}
+          ╵                                  ~~~
+
+  Warning occurs in the template of component GeographicRecordsComponent.
+
+    src/app/components/geographic-records/geographic-records.ts:25:15:
+      25 │   templateUrl: './geographic-records.html',
+         ╵                ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+▲ [WARNING] NG8107: The left side of this optional chain operation does not include 'null' or 'undefined' in its type, therefore the '?.' operator can be replaced with the '.' operator. [plugin angular-compiler]
+
+    src/app/components/geographic-records/geographic-records.html:212:95:
+      212 │ ...s_Google'] || (record.coords?.lat + ', ' + record.coords?.lon) }}
+          ╵                                                              ~~~
+
+  Warning occurs in the template of component GeographicRecordsComponent.
+
+    src/app/components/geographic-records/geographic-records.ts:25:15:
+      25 │   templateUrl: './geographic-records.html',
+         ╵                ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+▲ [WARNING] Module 'urijs' used by 'node_modules/@cesium/engine/Source/DataSources/CzmlDataSource.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'protobufjs/dist/minimal/protobuf.js' used by 'node_modules/@cesium/engine/Source/Core/GoogleEarthEnterpriseMetadata.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'mersenne-twister' used by 'node_modules/@cesium/engine/Source/Core/Math.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'lerc' used by 'node_modules/@cesium/engine/Source/Scene/I3SDataProvider.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'bitmap-sdf' used by 'node_modules/@cesium/engine/Source/Scene/LabelCollection.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'grapheme-splitter' used by 'node_modules/@cesium/engine/Source/Scene/LabelCollection.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+▲ [WARNING] Module 'nosleep.js' used by 'node_modules/@cesium/widgets/Source/VRButton/VRButtonViewModel.js' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+Output location: C:\Users\cgrub\OneDrive\Documents\NewGeovisor-1\frontend\dist\frontend
+
