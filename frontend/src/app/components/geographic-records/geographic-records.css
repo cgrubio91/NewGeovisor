@@ -164,6 +164,16 @@
   box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
 }
 
+.btn-heatmap {
+  background: linear-gradient(135deg, #ff5722 0%, #ff9800 100%);
+  color: #fff;
+}
+
+.btn-heatmap:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 87, 34, 0.4);
+}
+
 /* ===== RESULTADOS ===== */
 .results-section {
   animation: slideIn 0.3s ease;

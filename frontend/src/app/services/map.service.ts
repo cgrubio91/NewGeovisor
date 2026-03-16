@@ -15,6 +15,7 @@ import proj4 from 'proj4';
 import { Subject, BehaviorSubject, Observable } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { Style, Fill, Stroke, Text, Circle as CircleStyle } from 'ol/style';
+import HeatmapLayer from 'ol/layer/Heatmap';
 
 // Register all available proj4 definitions
 register(proj4);
@@ -125,6 +126,14 @@ export class MapService {
         if (this.recordsGeoJSON) {
             this.addVectorLayer('Registros Filtrados', this.recordsGeoJSON, 9999);
         }
+        
+        // Add pending session layers
+        if (this.pendingSessionLayers.length > 0) {
+            this.pendingSessionLayers.forEach(l => this.map.addLayer(l));
+            this.pendingSessionLayers = [];
+            this.updateLayerList();
+        }
+        
         return this.map;
     }
 
@@ -213,6 +222,42 @@ export class MapService {
             console.log('MapService: Mapa no listo, capa guardada en cache para inicio posterior.');
         }
     }
+
+    /**
+     * Agrega una capa de mapa de calor
+     */
+    addHeatmapLayer(name: string, geojson: any, id?: string | number) {
+        console.log(`[MapService] Generando Heatmap: ${name} con ${geojson.features.length} puntos`);
+        const heatmapLayer = new HeatmapLayer({
+            source: new VectorSource({
+                features: new GeoJSON().readFeatures(geojson, {
+                    dataProjection: 'EPSG:4326',
+                    featureProjection: 'EPSG:3857'
+                })
+            }),
+            blur: 20,
+            radius: 10,
+            weight: (feature) => {
+                // Se puede pesar basándose en alguna propiedad si se desea
+                return 1.0;
+            },
+            properties: {
+                name: name,
+                id: id || 'heatmap_' + Date.now(),
+                type: 'heatmap',
+                geojson: geojson // Store for download
+            }
+        });
+
+        if (this.map) {
+            this.addLayer(heatmapLayer, 'heatmap');
+        } else {
+            // Si el mapa no está listo, guardarlo para añadirlo al iniciar
+            this.pendingSessionLayers.push(heatmapLayer);
+        }
+    }
+
+    private pendingSessionLayers: any[] = [];
 
     clearRecordsLayer() {
         this.recordsGeoJSON = null;
@@ -344,14 +389,20 @@ export class MapService {
 
     /**
      * Limpia todas las capas no base del mapa
+     * @param force Si es true, limpia incluso las capas de sesión (heatmaps, etc)
      */
-    clearLayers() {
+    clearLayers(force: boolean = false) {
         if (!this.map) return;
         const layers = this.map.getLayers().getArray();
         for (let i = layers.length - 1; i >= 0; i--) {
             const layer = layers[i];
-            if (layer.get('type') !== 'base' && layer.get('type') !== 'overlay') {
-                this.map.removeLayer(layer);
+            const type = layer.get('type');
+            
+            // Si no es base y (es forzado o no es una capa persistente de sesión)
+            if (type !== 'base' && type !== 'overlay') {
+                if (force || (type !== 'heatmap' && layer.get('id') !== 9999)) {
+                    this.map.removeLayer(layer);
+                }
             }
         }
         this.updateLayerList();

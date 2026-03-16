@@ -123,6 +123,7 @@ import { Layer, Folder } from '../../models/models';
             </div>
 
             <div class="name-side" (click)="selectLayer(layer.id)">
+              <i class="fas fa-{{ getLayerIcon(layer.layer_type) }}" style="margin-right: 8px; color: var(--color-primary-cyan); font-size: 0.8rem;"></i>
               <span class="layer-name" 
                     [title]="layer.name" 
                     (dblclick)="openRenameModal(layer)">
@@ -476,7 +477,37 @@ export class LayerControlComponent implements OnInit {
         }
       })
     );
+
+    // Suscribirse a capas de sesión (Heatmaps, etc) del MapService
+    this.subs.push(
+      this.mapService.layersChanged.subscribe(allMapLayers => {
+        // Filtrar capas que no son del proyecto (son de sesión)
+        // Ejemplo: heatmaps o capas temporales
+        const currentProjectLayersIds = new Set(this.layers.map(l => String(l.id)));
+        
+        const sessionLayers = allMapLayers
+          .filter(ml => 
+            !currentProjectLayersIds.has(String(ml.id)) && 
+            ml.type !== 'base' && 
+            ml.type !== 'overlay'
+          )
+          .map(ml => ({
+            id: ml.id,
+            name: ml.name,
+            visible: ml.visible,
+            opacity: ml.opacity,
+            layer_type: ml.type === 'heatmap' ? 'heatmap' : ml.type,
+            isSession: true,
+            instance: ml.instance
+          }));
+
+        this.sessionLayers = sessionLayers;
+        this.filterItems();
+      })
+    );
   }
+
+  sessionLayers: any[] = [];
 
   private checkAndStartPolling() {
     const hasProcessing = this.layers.some(l =>
@@ -511,8 +542,11 @@ export class LayerControlComponent implements OnInit {
 
   filterItems() {
     const term = this.searchTerm.toLowerCase();
-    const allLayers = term ? this.layers.filter(l => l.name.toLowerCase().includes(term)) : this.layers;
-    this.rootLayers = allLayers.filter(l => !l.folder_id);
+    const allProjectLayers = term ? this.layers.filter(l => l.name.toLowerCase().includes(term)) : this.layers;
+    const allSessionLayers = term ? this.sessionLayers.filter(l => l.name.toLowerCase().includes(term)) : this.sessionLayers;
+    
+    // Las capas de sesión siempre van a la raíz por ahora
+    this.rootLayers = [...allSessionLayers, ...allProjectLayers.filter(l => !l.folder_id)];
   }
 
   getLayersInFolder(folderId: number) {
@@ -598,9 +632,9 @@ export class LayerControlComponent implements OnInit {
   }
 
   deleteLayer(layer: any) {
-    if (!confirm(`¿Eliminar la capa "${layer.name}" permanentemente?`)) return;
+    if (!confirm(`¿Eliminar la capa "${layer.name}"?`)) return;
 
-    if (typeof layer.id !== 'number') {
+    if (layer.isSession || typeof layer.id !== 'number') {
       this.mapService.removeLayer(layer.id);
       return;
     }
@@ -671,6 +705,25 @@ export class LayerControlComponent implements OnInit {
   }
 
   downloadLayer(layer: any) {
+    if (layer.isSession && layer.layer_type === 'heatmap') {
+      // Descargar GeoJSON del heatmap
+      const instance = layer.instance;
+      if (instance) {
+        const geojson = instance.get('geojson');
+        if (geojson) {
+          const blob = new Blob([JSON.stringify(geojson)], { type: 'application/json' });
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${layer.name}.json`;
+          a.click();
+          window.URL.revokeObjectURL(url);
+          this.toastService.show('GeoJSON del mapa de calor descargado', 'success');
+          return;
+        }
+      }
+    }
+
     if (typeof layer.id !== 'number') return;
     const url = `${this.projectService.getApiUrl()}/layers/${layer.id}/download`;
     window.open(url, '_blank');
@@ -765,5 +818,18 @@ export class LayerControlComponent implements OnInit {
       },
       error: () => this.toastService.show('Error al actualizar geocerca', 'error')
     });
+  }
+
+  getLayerIcon(layerType: string): string {
+    const icons: { [key: string]: string } = {
+      'raster': 'image',
+      'vector': 'share-nodes',
+      '3d_model': 'cube',
+      'point_cloud': 'cloud',
+      'cad': 'file-contract',
+      'kml': 'map-location-dot',
+      'heatmap': 'fire'
+    };
+    return icons[layerType] || 'layer-group';
   }
 }

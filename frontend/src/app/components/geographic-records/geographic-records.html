@@ -168,7 +168,20 @@
         <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
         <circle cx="12" cy="10" r="3"></circle>
       </svg>
-      Mostrar {{ recordsForMap.length }} Registros en el Mapa
+      Mostrar {{ recordsForMap.length }} Marcadores en el Mapa
+    </button>
+
+    <button 
+      *ngIf="!isLoading && recordsForMap.length > 0"
+      class="btn btn-large btn-heatmap"
+      (click)="loadHeatmapToMap()"
+      style="margin-top: 10px; background: linear-gradient(135deg, #ff5722 0%, #ff9800 100%);"
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2c-4 0-8 2-8 6 0 3 3 7 8 12 5-5 8-9 8-12 0-4-4-6-8-6z"></path>
+        <circle cx="12" cy="8" r="3"></circle>
+      </svg>
+      Generar Mapa de Calor de los Registros
     </button>
 
     <!-- Tabla de Registros -->

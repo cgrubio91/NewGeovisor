@@ -294,6 +294,56 @@ export class GeographicRecordsComponent implements OnInit, OnDestroy {
   }
 
   /**
+   * Genera un mapa de calor a partir de los registros filtrados
+   */
+  loadHeatmapToMap() {
+    console.log('[GeographicRecords] Click en Generar Mapa de Calor. Registros:', this.recordsForMap.length);
+    if (this.recordsForMap.length === 0) {
+      this.toastService.show('No hay registros con coordenadas para el mapa de calor', 'warning');
+      return;
+    }
+
+    // Construir GeoJSON de los puntos
+    const features = this.recordsForMap
+      .map(r => {
+        const coords = r.coords || this.geoService.parseCoordinates(r.coordinates_google);
+        if (!coords || coords.lat === undefined || coords.lon === undefined) return null;
+        
+        return {
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [coords.lon, coords.lat]
+          },
+          properties: {
+            ...r
+          }
+        };
+      })
+      .filter(f => f !== null);
+
+    const geojson = {
+      type: 'FeatureCollection',
+      features: features
+    };
+
+    const now = new Date();
+    const heatmapName = `Mapa Calor: ${this.filterForm.value.nombreProyecto || 'Consulta'} (${now.toLocaleTimeString()})`;
+    
+    this.mapService.addHeatmapLayer(heatmapName, geojson);
+    
+    this.toastService.show(
+      `Se ha generado el mapa de calor con ${this.recordsForMap.length} puntos.`,
+      'success'
+    );
+
+    // Navegar automáticamente al visor
+    setTimeout(() => {
+      this.router.navigate(['/map']);
+    }, 500);
+  }
+
+  /**
    * Descarga el reporte en Excel
    */
   downloadReport() {
