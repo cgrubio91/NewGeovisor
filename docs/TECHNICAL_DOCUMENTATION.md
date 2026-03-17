@@ -1,64 +1,88 @@
-# Geovisor Pro - Documentación Técnica
+# Geovisor Pro - Documentación Técnica Detallada
 
-Esta documentación explica la arquitectura y función de cada archivo principal dentro del repositorio del Geovisor Pro, una plataforma web de análisis geoespacial para la gestión de proyectos, carga de capas, visualización en 2D/3D y generación de reportes avanzados a través de integraciones con los registros en MongoDB y PostgreSQL.
-
-## Estructura del Proyecto
-
-El código está dividido en dos grandes bloques:
-- **`backend/`**: API RESTful en **FastAPI** (Python 3)
-- **`frontend/`**: Aplicación de página única en **Angular 17+** (TypeScript)
+Esta documentación proporciona una visión exhaustiva de la arquitectura del Geovisor Pro, detallando la función de cada script y componente tanto en el Backend como en el Frontend. 
 
 ---
 
-## 1. Backend (Python/FastAPI)
-
-El backend maneja la lógica de negocio, procesamiento de información geoespacial local, autenticación, y conexión concurrente a PostgreSQL y MongoDB.
-
-### Archivos Principales
-* **`main.py`**: El punto de entrada central de la API. Orquesta los endpoints para usuarios, proyectos, subida de capas, reportes geográficos, conversiones 3D y sincronización base de datos. Administra las verificaciones de roles (midlewares).
-* **`database.py`**: Gestiona la configuración de conexión hacia PostgreSQL a través de SQLAlchemy y maneja la base de datos persistente.
-* **`models.py`**: Define los modelos relacionales (Tablas) que SQLAlchemy sincroniza con la base de datos. Incluye los esquemas para Usuarios, Proyectos, Capas (Layers), y Mediciones (Measurements). Define también la geometría usada por PostGIS.
-* **`schemas.py`**: Modelos Pydantic que validan y serializan los datos al entrar o salir a los endpoints REST mediante esquemas estrictos.
-* **`crud.py`**: Concentra las operaciones puras a la base de datos (CREATE, READ, UPDATE, DELETE). Aísla la lógica de consultas complejas para limpiar `main.py`.
-* **`geographic_records.py`**: **Motor de Análisis Geoespacial Avanzado**. Establece el túnel SSH hacia el clúster MongoDB, descarga registros en rangos de fecha, extrae las geocercas activas (kml/kmz) guardadas en la plataforma, y usa `shapely` para cruzar las coordenadas produciendo hojas de cálculo (Excel) y visores geográficos (KML).
-* **`gis_service.py` / `file_processor.py`**: Componentes auxiliares para procesar archivos físicos y abstraer transformaciones espaciales comunes (CRS).
-* **`setup_admin.py` y `init_db.py`**: Scripts independientes para inicializar la base de datos con un esquema preconstruido y crear las credenciales iniciales del superadministrador.
-* **`requirements.txt`**: Lista explícita de las dependencias e integraciones de servidor requeridas para el ecosistema de Python.
+## 🛡️ Privacidad y Seguridad
+**IMPORTANTE:** Todas las configuraciones sensibles (credenciales de base de datos, llaves SSH, tokens JWT, rutas de servidor) se gestionan exclusivamente a través de variables de entorno en el archivo `.env`. Esta documentación describe la estructura y lógica de los scripts sin exponer datos privados.
 
 ---
 
-## 2. Frontend (Angular)
+## 1. Arquitectura del Backend (Python / FastAPI)
 
-Desarrollada bajo componentes modulares (Stand-Alone Components) para un renderizado dinámico e instantáneo.
+El backend es el motor de procesamiento geoespacial y la API que sirve los datos al cliente. Está diseñado para manejar grandes volúmenes de datos y procesar archivos GIS complejos.
 
-### Archivos Principales
-* **`src/app/components/`**: Aloja cada fragmento funcional de la interfaz visual.
- * **`header/`**: Componente global superior de la aplicación. Maneja el menú de navegación condicional donde expone los módulos correspondientes según el rol (Usuario, Administrador, Director).
- * **`map/`**: Carga el visor principal OpenLayers. Orquesta las vistas Raster y vectoriales y permite renderización de polígonos sobre el plano interactivo.
- * **`map3d/`**: Integra transformaciones avanzadas como Three.js/Cesium (opcional) o vistas paramétricas de modelos 3D asociados al proyecto.
- * **`geographic-records/`**: Interfaz donde el usuario de Rol "Director/Administrador" consulta registros específicos. Presenta controles para filtrar por intervalo de fechas y renderiza estadísticas con botones de descarga KML/Excel.
- * **`project-manager/`**: Administrador visual de proyectos habilitado para organizar capas, editar metadatos o adjuntar archivos físicos, con visibilidad filtrada.
- * **`login/`**: Puerta de entrada mediante el JWT para las sesiones en la aplicación.
+### 🏠 Núcleo de la API
+*   **`main.py`**: Punto de entrada de la aplicación FastAPI. Define las rutas de la API, maneja el CORS y orquesta la integración de todos los módulos.
+*   **`database.py`**: Configuración de la conexión a PostgreSQL/PostGIS. Implementa el motor de persistencia y la gestión de sesiones de base de datos.
+*   **`models.py`**: Definición de las tablas relacionales (Proyectos, Capas, Usuarios, Mediciones) utilizando SQLAlchemy.
+*   **`schemas.py`**: Modelos de validación Pydantic que aseguran que los datos enviados y recibidos cumplan con el formato esperado.
+*   **`crud.py`**: Contiene todas las operaciones directas de base de datos (Crear, Leer, Actualizar, Borrar) para mantener la lógica de negocio separada de los endpoints.
 
-* **`src/app/services/`**: Controladores que encapsulan todas las peticiones hacia la API `backend/`.
- * **`auth.service.ts`**: Administra el token y valida qué rol posee el usuario actualmente autenticado (RBAC restrictivo).
- * **`project.service.ts`**: Solicita información al backend limitando las vistas con base a la pertenencia o designación de acceso de la persona.
- * **`geographic-records.service.ts`**: Orquesta la comunicación para emitir reportes de cruce, procesar PIDs de MongoDB y permitir o denegar el despliegue del mapa según corresponda.
+### ⚙️ Procesamiento Geoespacial
+*   **`geographic_records.py`**: Clase central de análisis. Gestiona túneles SSH para extraer registros de MongoDB, realiza cruces espaciales con geocercas KML/KMZ y clasifica ubicaciones (En Obra / En Oficina / Externo).
+*   **`gis_service.py`**: Servicios para manejo de proyecciones (EPSG), transformaciones de coordenadas y utilidades GIS generales.
+*   **`file_processor.py`**: Lógica para la lectura y validación de archivos subidos (KML, Shapefiles, GeoTIFF).
+*   **`tile_renderer.py`**: Motor encargado de renderizar imágenes raster pesadas en "tiles" para su visualización eficiente en el mapa.
+*   **`convert_3d.py`**: Script para transformar nubes de puntos (LAS/LAZ) o modelos CAD a formatos compatibles con visualizadores 3D (Cesium/Three.js).
+*   **`convert_cogs.py`**: Convierte imágenes ortofotos convencionales en *Cloud Optimized GeoTIFFs* para una carga progresiva rápida.
 
-* **`src/styles.css` / `index.css`**: Archivos base que definen la estética corporativa general, usando colores en hexadecimales enriquecidos para una apariencia estricta y profesional sin Tailwind.
+### 🛠️ Scripts de Mantenimiento y Migración
+*   **`migrate_db.py`**: Realiza cambios estructurales en las tablas de la base de datos sin perder información.
+*   **`init_db.py`**: Inicializa una base de datos vacía con el esquema inicial necesario para que el sistema funcione.
+*   **`seed_db.py`**: Carga datos de prueba iniciales o configuraciones base.
+*   **`reset_processes.py`**: Limpia y reinicia estados de tareas en segundo plano que hayan quedado pendientes o fallidas.
+*   **`add_columns.py` / `add_icon_column.py`, etc.**: Scripts auxiliares específicos para actualizar el esquema de la base de datos de forma dirigida.
+
+### 🔍 Scripts de Diagnóstico
+*   **`check_db_layers.py`**: Verifica la integridad entre los archivos físicos en el servidor y sus registros en la base de datos.
+*   **`diagnose_query.py`**: Herramienta de depuración para analizar el rendimiento de las consultas espaciales complejas.
+*   **`run_geographic_analysis.py`**: Interfaz de línea de comandos (CLI) que permite ejecutar reportes de análisis de registros de forma manual e interactiva sin pasar por la web.
 
 ---
 
-## 3. Modelo Analítico de Roles
-La plataforma se rige por un estricto control de acceso basado en roles (RBAC):
+## 2. Arquitectura del Frontend (Angular 17+)
 
-- **Administrador**: Control total sobre el Geovisor. Lee/Escribe en todos los proyectos y manipula la cuenta de todos los colaboradores, adicionalmente consulta registros ajenos del módulo global.
-- **Director**: Visibilidad restringida _únicamente_ a los Proyectos y Capas asignados explícitamente a sí mismo. **Posee acceso completo al módulo de Registros (Geographic Records)** pudiendo revisar métricas de "EN OBRA/EN OFICINA" y exportaciones de KML/Excel pero **SOLO** acotado al perímetro de sus proyectos designados.
-- **Usuario**: Visibilidad restringida _únicamente_ a los Proyectos y Capas que le son concedidos. Este escalafón no expone herramientas de análisis geográfico ni despliega el menú de "Registros". Se limita a funciones exploratorias de las vistas de mapas o 3D asignados.
+El frontend es una Single Page Application (SPA) moderna enfocada en la visualización interactiva y la gestión intuitva de proyectos geoespacialies.
+
+### 🧩 Componentes Principales (`src/app/components/`)
+*   **`map/`**: El visor de mapas 2D basado en OpenLayers. Gestiona capas vectoriales, raster y la interacción del usuario con las geometrías.
+*   **`map3d/`**: Visor especializado en modelos de elevación digital y nubes de puntos 3D.
+*   **`geographic-records/`**: Módulo de reportes donde el usuario visualiza estadísticas de trabajo de campo a través de gráficos y tablas.
+*   **`project-manager/`**: Interfaz administrativa para la creación de proyectos y subida de información.
+*   **`layer-control/` / `layer-panel/`**: Herramientas para activar, desactivar y gestionar la transparencia/orden de las capas cargadas.
+*   **`basemap-selector/`**: Selector dinámico de mapas base (Satélite, Topográfico, etc.).
+*   **`measurement-panel/`**: Herramienta interactiva para medir distancias y áreas directamente en el mapa.
+*   **`layer-compare/`**: Implementa la funcionalidad de "Swipe" o cortinilla para comparar dos capas temporalmente (ej. Ortofotos de distintos meses).
+*   **`user-manager/`**: Módulo para la administración de usuarios, roles y permisos de acceso.
+
+### 📡 Servicios de Datos (`src/app/services/`)
+*   **`api.service.ts`**: Clase base para todas las peticiones HTTP, centralizando el manejo de errores y cabeceras.
+*   **`auth.service.ts`**: Gestiona el inicio de sesión, el almacenamiento del JWT y la protección de rutas según el rol.
+*   **`map.service.ts`**: Mantiene el estado del visor 2D y permite la comunicación entre distintos componentes y el mapa.
+*   **`project.service.ts` / `layer.service.ts`**: Servicios dedicados a obtener y actualizar información de proyectos y capas respectivamente.
+*   **`geographic-records.service.ts`**: Orquesta las peticiones complejas de reportes y descargas de Excel/KML.
+*   **`toast.service.ts`**: Administra las notificaciones visuales (alertas) en la interfaz.
 
 ---
 
-## 4. Estructura Persistente (Sistema de Archivos)
-El ecosistema guarda información generada en rutas claves descritas en `.gitignore`:
-* **`backend/report/`**: Destino recurrente para guardar los archivos emitidos por `geographic_records.py`.
-* **`backend/uploads/` y `backend/kml_proyectos/`**: Carpetas estratégicas que agrupan las mallas geocercas usadas para discernir qué puntos aplican físicamente en fronteras topográficas usando `shapely.contains()`.
+## 3. Infraestructura y Configuración
+
+*   **`docker-compose.yml`**: Define los servicios (Contenedores) que componen la plataforma:
+    *   **db**: Base de datos PostGIS (PostgreSQL + Extensiones Espaciales).
+    *   **backend**: API FastAPI corriendo sobre Uvicorn.
+    *   **frontend**: Servidor Nginx que sirve los archivos estáticos de la aplicación Angular.
+*   **`backend/.env.example`**: Plantilla de las variables necesarias para el despliegue:
+    *   Conexión a base de datos.
+    *   Configuración de Túnel SSH para acceso a datos externos.
+    *   Límites de memoria y puertos.
+
+---
+
+## 📈 Flujo de Datos Típico
+1. El **Usuario** carga un archivo KMZ en el **Project Manager**.
+2. El **Frontend** lo envía vía **Layer Service** al endpoint de carga en el **Backend**.
+3. El **Backend** (`main.py`) recibe el archivo, lo guarda en `uploads/` y genera un registro en **PostgreSQL** vía **CRUD**.
+4. Si se requiere análisis, `run_geographic_analysis.py` o los servicios internos invocan a `geographic_records.py` para cruzar esos datos con la base de datos externa de registros.
+5. Los resultados se visualizan de nuevo en el **Mapa 2D/3D** o se descargan como reportes estructurados.
