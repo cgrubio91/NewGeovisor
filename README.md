@@ -4,7 +4,7 @@ Geovisor Pro es una solución web de alto rendimiento para la gestión, visualiz
 
 ---
 
-## Características Estelares
+## Características Principales
 
 ### Gestión Integral de Proyectos
 * **Control de Accesos:** Asignación de múltiples usuarios a proyectos específicos.
@@ -12,7 +12,7 @@ Geovisor Pro es una solución web de alto rendimiento para la gestión, visualiz
 * **Jerarquía Inteligente:** Organización de capas mediante carpetas y subcarpetas.
 * **Dashboard Estadístico:** Visualización del estado del sistema y visitas a proyectos.
 
-### Poder Multiformato
+### Manejo Multiformato
 Visualice prácticamente cualquier dato GIS sin software adicional:
 * **Imágenes:** TIFF, GeoTIFF, ECW, Ortofotos.
 * **Vectores:** KML, KMZ, Shapefile, GeoJSON.
@@ -21,6 +21,7 @@ Visualice prácticamente cualquier dato GIS sin software adicional:
 ### Experiencia de Navegación
 * **Modo Dual:** Cambio instantáneo entre vistas **2D (OpenLayers)** y **3D (CesiumJS)**.
 * **Comparación Avanzada:** Herramienta de **Cortinilla (Swipe)** para comparar cambios temporales u ortofotos.
+* **Mediciones 2D:** Herramienta de **Medición y marcadores** para registrar medidas básicas en  2D como áreas y distancias.
 * **Mapas Base:** Selección entre Satélite, Topográfico, Oscuro, Claro y OpenStreetMap.
 
 ---
@@ -57,15 +58,9 @@ docker-compose exec backend python create_admin.py
 ## Documentación Completa
 
 Para detalles técnicos, guías de migración y arquitectura profunda, consulte:
- **[DOCUMENTATION.md](./DOCUMENTATION.md)**
+ **[DOCUMENTATION.md](./docs/TECHNICAL_DOCUMENTATION.md)**
 
 ---
 
-## Contribuciones y Soporte
-
-Este proyecto es el núcleo de una plataforma de gestión geoespacial empresarial.
-* **Versión actual:** 2.1.0 (Fase 1 completada)
-* **Próxima Fase:** Optimización de modelos 3D y análisis volumétrico.
-
 ---
-*Desarrollado con por el equipo de Geovisor Pro.*
+*Desarrollado con por el equipo de MABTEC.*
