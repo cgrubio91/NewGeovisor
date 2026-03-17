@@ -2,7 +2,7 @@
 
 Esta documentación explica la arquitectura y función de cada archivo principal dentro del repositorio del Geovisor Pro, una plataforma web de análisis geoespacial para la gestión de proyectos, carga de capas, visualización en 2D/3D y generación de reportes avanzados a través de integraciones con los registros en MongoDB y PostgreSQL.
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 El código está dividido en dos grandes bloques:
 - **`backend/`**: API RESTful en **FastAPI** (Python 3)
@@ -33,17 +33,17 @@ Desarrollada bajo componentes modulares (Stand-Alone Components) para un renderi
 
 ### Archivos Principales
 * **`src/app/components/`**: Aloja cada fragmento funcional de la interfaz visual.
-  * **`header/`**: Componente global superior de la aplicación. Maneja el menú de navegación condicional donde expone los módulos correspondientes según el rol (Usuario, Administrador, Director).
-  * **`map/`**: Carga el visor principal OpenLayers. Orquesta las vistas Raster y vectoriales y permite renderización de polígonos sobre el plano interactivo.
-  * **`map3d/`**: Integra transformaciones avanzadas como Three.js/Cesium (opcional) o vistas paramétricas de modelos 3D asociados al proyecto.
-  * **`geographic-records/`**: Interfaz donde el usuario de Rol "Director/Administrador" consulta registros específicos. Presenta controles para filtrar por intervalo de fechas y renderiza estadísticas con botones de descarga KML/Excel.
-  * **`project-manager/`**: Administrador visual de proyectos habilitado para organizar capas, editar metadatos o adjuntar archivos físicos, con visibilidad filtrada.
-  * **`login/`**: Puerta de entrada mediante el JWT para las sesiones en la aplicación.
+ * **`header/`**: Componente global superior de la aplicación. Maneja el menú de navegación condicional donde expone los módulos correspondientes según el rol (Usuario, Administrador, Director).
+ * **`map/`**: Carga el visor principal OpenLayers. Orquesta las vistas Raster y vectoriales y permite renderización de polígonos sobre el plano interactivo.
+ * **`map3d/`**: Integra transformaciones avanzadas como Three.js/Cesium (opcional) o vistas paramétricas de modelos 3D asociados al proyecto.
+ * **`geographic-records/`**: Interfaz donde el usuario de Rol "Director/Administrador" consulta registros específicos. Presenta controles para filtrar por intervalo de fechas y renderiza estadísticas con botones de descarga KML/Excel.
+ * **`project-manager/`**: Administrador visual de proyectos habilitado para organizar capas, editar metadatos o adjuntar archivos físicos, con visibilidad filtrada.
+ * **`login/`**: Puerta de entrada mediante el JWT para las sesiones en la aplicación.
 
 * **`src/app/services/`**: Controladores que encapsulan todas las peticiones hacia la API `backend/`.
-  * **`auth.service.ts`**: Administra el token y valida qué rol posee el usuario actualmente autenticado (RBAC restrictivo).
-  * **`project.service.ts`**: Solicita información al backend limitando las vistas con base a la pertenencia o designación de acceso de la persona.
-  * **`geographic-records.service.ts`**: Orquesta la comunicación para emitir reportes de cruce, procesar PIDs de MongoDB y permitir o denegar el despliegue del mapa según corresponda.
+ * **`auth.service.ts`**: Administra el token y valida qué rol posee el usuario actualmente autenticado (RBAC restrictivo).
+ * **`project.service.ts`**: Solicita información al backend limitando las vistas con base a la pertenencia o designación de acceso de la persona.
+ * **`geographic-records.service.ts`**: Orquesta la comunicación para emitir reportes de cruce, procesar PIDs de MongoDB y permitir o denegar el despliegue del mapa según corresponda.
 
 * **`src/styles.css` / `index.css`**: Archivos base que definen la estética corporativa general, usando colores en hexadecimales enriquecidos para una apariencia estricta y profesional sin Tailwind.
 

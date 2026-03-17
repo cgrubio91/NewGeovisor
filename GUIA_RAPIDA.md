@@ -1,4 +1,4 @@
-# 🚀 Guía Rápida de Inicio
+# Guía Rápida de Inicio
 
 Sigue estos pasos para poner en marcha el proyecto:
 
@@ -32,6 +32,6 @@ npm start
 
 ---
 
-### 📝 Notas Importantes:
+### Notas Importantes:
 - Asegúrate de que el archivo `.env` en la carpeta `backend` tenga las credenciales correctas.
 - Si es la primera vez que lo corres, asegúrate de tener las dependencias instaladas (`pip install -r requirements.txt` y `npm install`).

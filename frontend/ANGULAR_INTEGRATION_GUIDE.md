@@ -1,16 +1,16 @@
 # Guía de Integración: Componente Angular para Análisis Geográfico
 
-## 📋 Descripción
+## Descripción
 
 Este documento proporciona instrucciones paso a paso para integrar el componente Angular de análisis geográfico de registros en la aplicación Geovisor.
 
-## 📁 Archivos Incluidos
+## Archivos Incluidos
 
 1. **COMPONENT_EXAMPLE_TypeScript.ts** - Lógica del componente (CoTS)
 2. **COMPONENT_EXAMPLE_Template.html** - Plantilla HTML
 3. **COMPONENT_EXAMPLE_Styles.scss** - Estilos SCSS
 
-## 🚀 Pasos de Integración
+## Pasos de Integración
 
 ### Paso 1: Crear el Componente
 
@@ -24,10 +24,10 @@ ng generate component components/geographic-records --module=app
 Este comando crea:
 ```
 src/app/components/geographic-records/
-├── geographic-records.component.ts
-├── geographic-records.component.html
-├── geographic-records.component.scss
-└── geographic-records.component.spec.ts
+ geographic-records.component.ts
+ geographic-records.component.html
+ geographic-records.component.scss
+ geographic-records.component.spec.ts
 ```
 
 ### Paso 2: Reemplazar el Archivo TypeScript
@@ -52,28 +52,28 @@ En `src/app/app.module.ts`:
 import { GeographicRecordsComponent } from './components/geographic-records/geographic-records.component';
 
 @NgModule({
-  declarations: [
-    // ... otros componentes
-    GeographicRecordsComponent
-  ],
-  imports: [
-    // ... otros módulos
-    MatCardModule,
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatIconModule,
-    MatTableModule,
-    MatChipsModule,
-    MatSnackBarModule,
-    MatProgressSpinnerModule,
-    MatSelectModule,
-    MatDatepickerModule,
-    MatNativeDateModule,
-    ReactiveFormsModule,
-    CommonModule,
-    HttpClientModule
-  ]
+ declarations: [
+ // ... otros componentes
+ GeographicRecordsComponent
+ ],
+ imports: [
+ // ... otros módulos
+ MatCardModule,
+ MatButtonModule,
+ MatFormFieldModule,
+ MatInputModule,
+ MatIconModule,
+ MatTableModule,
+ MatChipsModule,
+ MatSnackBarModule,
+ MatProgressSpinnerModule,
+ MatSelectModule,
+ MatDatepickerModule,
+ MatNativeDateModule,
+ ReactiveFormsModule,
+ CommonModule,
+ HttpClientModule
+ ]
 })
 export class AppModule { }
 ```
@@ -84,11 +84,11 @@ Si deseas que sea una página independiente, agrega la ruta en `src/app/app-rout
 
 ```typescript
 const routes: Routes = [
-  // ... otras rutas
-  {
-    path: 'reportes/registros-geograficos',
-    component: GeographicRecordsComponent
-  }
+ // ... otras rutas
+ {
+ path: 'reportes/registros-geograficos',
+ component: GeographicRecordsComponent
+ }
 ];
 ```
 
@@ -96,27 +96,27 @@ Luego agrega un enlace en el menú de navegación:
 
 ```html
 <a mat-list-item routerLink="/reportes/registros-geograficos">
-  <mat-icon matListItemIcon>public</mat-icon>
-  <span matListItemTitle>Análisis Geográfico</span>
+ <mat-icon matListItemIcon>public</mat-icon>
+ <span matListItemTitle>Análisis Geográfico</span>
 </a>
 ```
 
-## 📦 Dependencias Requeridas
+## Dependencias Requeridas
 
 Asegúrate de que tu `package.json` tiene estas dependencias:
 
 ```json
 {
-  "dependencies": {
-    "@angular/common": ">=15.0.0",
-    "@angular/core": ">=15.0.0",
-    "@angular/forms": ">=15.0.0",
-    "@angular/material": ">=15.0.0",
-    "@angular/platform-browser": ">=15.0.0",
-    "@angular/platform-browser-dynamic": ">=15.0.0",
-    "rxjs": ">=7.5.0",
-    "file-saver": "^2.0.5"
-  }
+ "dependencies": {
+ "@angular/common": ">=15.0.0",
+ "@angular/core": ">=15.0.0",
+ "@angular/forms": ">=15.0.0",
+ "@angular/material": ">=15.0.0",
+ "@angular/platform-browser": ">=15.0.0",
+ "@angular/platform-browser-dynamic": ">=15.0.0",
+ "rxjs": ">=7.5.0",
+ "file-saver": "^2.0.5"
+ }
 }
 ```
 
@@ -128,7 +128,7 @@ npm install file-saver
 npm install --save-dev @types/file-saver
 ```
 
-## 🔌 Servicios HTTP
+## Servicios HTTP
 
 El componente usa `HttpClient` para llamar a los endpoints de la API. Asegúrate de tener un interceptor HTTP que:
 
@@ -143,31 +143,31 @@ Si no tienes un interceptor, crea uno:
 ```typescript
 import { Injectable } from '@angular/core';
 import {
-  HttpRequest,
-  HttpHandler,
-  HttpEvent,
-  HttpInterceptor
+ HttpRequest,
+ HttpHandler,
+ HttpEvent,
+ HttpInterceptor
 } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 @Injectable()
 export class AuthInterceptor implements HttpInterceptor {
-  
-  constructor(private authService: AuthService) {}
+ 
+ constructor(private authService: AuthService) {}
 
-  intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
-    const token = this.authService.getToken();
-    
-    if (token) {
-      request = request.clone({
-        setHeaders: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-    }
-    
-    return next.handle(request);
-  }
+ intercept(request: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
+ const token = this.authService.getToken();
+ 
+ if (token) {
+ request = request.clone({
+ setHeaders: {
+ Authorization: `Bearer ${token}`
+ }
+ });
+ }
+ 
+ return next.handle(request);
+ }
 }
 ```
 
@@ -178,19 +178,19 @@ import { HTTP_INTERCEPTORS } from '@angular/common/http';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
 
 @NgModule({
-  // ...
-  providers: [
-    {
-      provide: HTTP_INTERCEPTORS,
-      useClass: AuthInterceptor,
-      multi: true
-    }
-  ]
+ // ...
+ providers: [
+ {
+ provide: HTTP_INTERCEPTORS,
+ useClass: AuthInterceptor,
+ multi: true
+ }
+ ]
 })
 export class AppModule { }
 ```
 
-## 🎨 Customización
+## Customización
 
 ### Cambiar Colores
 
@@ -201,18 +201,18 @@ En `COMPONENT_EXAMPLE_Styles.scss`:
 ```scss
 // Cambiar colores principales
 .en-obra {
-  border-left-color: #tu-color !important;
-  background: rgba(tu-color, 0.05);
+ border-left-color: #tu-color !important;
+ background: rgba(tu-color, 0.05);
 }
 
 .en-oficina {
-  border-left-color: #tu-color !important;
-  background: rgba(tu-color, 0.05);
+ border-left-color: #tu-color !important;
+ background: rgba(tu-color, 0.05);
 }
 
 .externa {
-  border-left-color: #tu-color !important;
-  background: rgba(tu-color, 0.05);
+ border-left-color: #tu-color !important;
+ background: rgba(tu-color, 0.05);
 }
 ```
 
@@ -222,12 +222,12 @@ En `COMPONENT_EXAMPLE_TypeScript.ts`, modifica los strings asociados a cada clas
 
 ```typescript
 obtenerIconoClasificacion(clasificacion: string): string {
-  const iconos: { [key: string]: string } = {
-    'EN OBRA': 'construction',  // Cambiar icono
-    'EN OFICINA': 'business',   // Cambiar icono
-    'UBICACIÓN EXTERNA': 'location_on'  // Cambiar icono
-  };
-  return iconos[clasificacion] || 'question_mark';
+ const iconos: { [key: string]: string } = {
+ 'EN OBRA': 'construction', // Cambiar icono
+ 'EN OFICINA': 'business', // Cambiar icono
+ 'UBICACIÓN EXTERNA': 'location_on' // Cambiar icono
+ };
+ return iconos[clasificacion] || 'question_mark';
 }
 ```
 
@@ -238,30 +238,30 @@ Para agregar un nuevo filtro:
 1. En el formulario HTML:
 ```html
 <mat-form-field class="form-field">
-  <mat-label>Mi Nuevo Filtro</mat-label>
-  <input matInput formControlName="nuevoFiltro">
+ <mat-label>Mi Nuevo Filtro</mat-label>
+ <input matInput formControlName="nuevoFiltro">
 </mat-form-field>
 ```
 
 2. En el TypeScript:
 ```typescript
 crearFormulario(): FormGroup {
-  return this.fb.group({
-    // ... otros campos
-    nuevoFiltro: ['']
-  });
+ return this.fb.group({
+ // ... otros campos
+ nuevoFiltro: ['']
+ });
 }
 ```
 
 3. En la llamada a la API:
 ```typescript
 const payload = {
-  // ... otros campos
-  nuevo_filtro: this.form.get('nuevoFiltro')?.value || null
+ // ... otros campos
+ nuevo_filtro: this.form.get('nuevoFiltro')?.value || null
 };
 ```
 
-## 🧪 Testing
+## Testing
 
 ### Prueba Manual en Desarrollo
 
@@ -277,9 +277,9 @@ http://localhost:4200/reportes/registros-geograficos
 ```
 
 3. Prueba los filtros:
-   - Ingresa fechas válidas
-   - Deja filtros opcionales en blanco
-   - Haz clic en "Generar Reporte"
+ - Ingresa fechas válidas
+ - Deja filtros opcionales en blanco
+ - Haz clic en "Generar Reporte"
 
 ### Prueba con datos reales
 
@@ -296,7 +296,7 @@ uvicorn main:app --reload --port 8000
 python run_geographic_analysis.py --info
 ```
 
-## 📡 Integración API
+## Integración API
 
 El componente llama a estos endpoints:
 
@@ -308,11 +308,11 @@ POST /api/v1/geographic-records/generar-reporte
 Request:
 ```json
 {
-  "fecha_inicio": "2026-01-01",
-  "fecha_fin": "2026-03-31",
-  "pid_filtro": null,
-  "user_filtro": null,
-  "nombre_proyecto_filtro": null
+ "fecha_inicio": "2026-01-01",
+ "fecha_fin": "2026-03-31",
+ "pid_filtro": null,
+ "user_filtro": null,
+ "nombre_proyecto_filtro": null
 }
 ```
 
@@ -321,7 +321,7 @@ Request:
 GET /api/v1/geographic-records/descargar/{filename}
 ```
 
-## 🔐 Seguridad
+## Seguridad
 
 ### CORS
 Asegúrate de que tu backend permite solicitudes desde el frontend:
@@ -329,9 +329,9 @@ Asegúrate de que tu backend permite solicitudes desde el frontend:
 En `main.py`:
 ```python
 allowed_origins = [
-    "http://localhost:4200",  # Desarrollo
-    "http://localhost:8080",  # Desarrollo alternativo
-    "https://tu-dominio.com"  # Producción
+ "http://localhost:4200", # Desarrollo
+ "http://localhost:8080", # Desarrollo alternativo
+ "https://tu-dominio.com" # Producción
 ]
 ```
 
@@ -339,7 +339,7 @@ allowed_origins = [
 El componente asume que hay un interceptor HTTP que agrega el token JWT.
 Si no lo tienes, la solicitud fallará con error 401.
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Error: "Cannot find module 'file-saver'"
 **Solución:**
@@ -368,14 +368,14 @@ npm install --save-dev @types/file-saver
 2. Verifica que el nombre del archivo en la respuesta sea correcto
 3. Abre la consola del navegador para ver si hay errores
 
-## 📚 Recursos Adicionales
+## Recursos Adicionales
 
 - [Documentación de Angular Material](https://material.angular.io/)
 - [Documentación de Angular Forms](https://angular.io/guide/reactive-forms)
 - [Documentación de RxJS](https://rxjs.dev/)
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 
-## ✅ Checklist Final
+## Checklist Final
 
 - [ ] Componente creado con `ng generate`
 - [ ] Archivos TypeScript, HTML y SCSS reemplazados
@@ -390,7 +390,7 @@ npm install --save-dev @types/file-saver
 - [ ] Credenciales SSH validadas
 - [ ] Prueba manual completada
 
-## 📞 Soporte
+## Soporte
 
 Si encuentras problemas:
 
@@ -402,6 +402,6 @@ Si encuentras problemas:
 
 ---
 
-**Versión**: 1.0  
-**Última actualización**: 12 de marzo de 2026  
-**Pronto a funcionar**: ✅ Listo
+**Versión**: 1.0 
+**Última actualización**: 12 de marzo de 2026 
+**Pronto a funcionar**: Listo
